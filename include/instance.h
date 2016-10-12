@@ -1,14 +1,23 @@
 #ifndef __INSTANCE_H__
 #define __INSTANCE_H__
 
-typedef struct instance_t instance_t;
+#ifdef __cplpusplus
+extern "C" {
+#endif
 
-instance_t *
-instance_new(char *);
+    typedef struct instance_t instance_t;
 
-void
-instance_destroy(instance_t **);
+    instance_t *
+    instance_new(char *);
 
-bool
+    instance_t *
+    instance_new_string(char *);
+
+    void
+    instance_destroy(instance_t **);
+
+#ifdef __cplpusplus
+}
+#endif
 
 #endif

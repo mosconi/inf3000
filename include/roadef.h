@@ -13,7 +13,10 @@
                         ROADEF_VERSION_MINOR, \
                         ROADEF_VERSION_PATCH)
 
-
+#include "prelude.h"
+#include "resource.h"
+#include "balance.h"
+#include "machine.h"
 #include "instance.h"
 
 #endif

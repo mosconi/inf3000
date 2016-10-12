@@ -1,26 +1,11 @@
 #include "roadef.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-    typedef 
-    struct balance_t {
-	int64_t r1;
-	int64_t r2;
-	int64_t target;
-	int64_t wbc;
-    } balance_t;
     
     struct instance_t {
 	size_t nof_resources;
 	bool *resouce_transient;
 	int64_t *wlc;
 	size_t nof_mach;
-	int64_t *mach_location;
-	int64_t *mach_neighborhood;
-	int64_t *mach_location;
-	int64_t *mach_cap;
+	machine_t *machines;
 	
 	size_t nof_proc;
 	
@@ -35,6 +20,3 @@ extern "C" {
     } ;
 
     
-#ifdef __cplusplus
-};
-#endif	
