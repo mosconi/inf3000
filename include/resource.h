@@ -8,10 +8,11 @@ extern "C" {
     typedef struct resource_t resource_t;
 
     resource_t *
-    resource_new();
+    resource_new(char *);
 
     void
-    resource_destroy(resouce_t **);
+    resource_destroy(resource_t **);
+
     
 #ifdef __cplusplus
 }

@@ -13,6 +13,7 @@ extern "C" {
     void
     balance_destroy(balance_t **);
 
+    int64_t
     balance_lookup(balance_t *, int64_t, int64_t);
 
 #ifdef _cplusplus

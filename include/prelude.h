@@ -207,6 +207,8 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
+#include <assert.h>
 
 // - External include files
 
@@ -306,14 +308,9 @@
 
 //- Data types --------------------------------------------------------------
 
-#ifndef __CZMQ_H_INCLUDED__
 typedef unsigned char   byte;           //  Single unsigned byte = 8 bits
 typedef unsigned short  dbyte;          //  Double byte = 16 bits
 typedef unsigned int    qbyte;          //  Quad byte = 32 bits
-#endif
-#ifndef __CZMQ_H_INCLUDED__
-typedef struct sockaddr_in inaddr_t;    //  Internet socket address structure
-#endif
 
 //- Inevitable macros -------------------------------------------------------
 
@@ -323,11 +320,6 @@ typedef struct sockaddr_in inaddr_t;    //  Internet socket address structure
 
 #ifndef strneq
 #define strneq(s1,s2)   (strcmp ((s1), (s2)))
-#endif
-
-#ifndef ZLOG_WRAPPER
-#define ZLOG_WRAPPER
-#define log(level,...) zsys_##level(__VA_ARGS__);
 #endif
 
 //  Provide random number from 0..(num-1)
