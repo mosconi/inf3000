@@ -3,20 +3,20 @@
 struct instance_t {
     size_t nres;
     resource_t **resources;
-    int64_t *wlc;
+    uint64_t *wlc;
     size_t nmach;
     machine_t **machines;
-	
-    size_t nproc;
-	
     size_t nserv;
+    service_t **services;
+    size_t nproc;
+    process_t **processes;
     size_t nloc;
     size_t nneigh;
     size_t nbalance;
     balance_t **balance;
-    int64_t wpmc;
-    int64_t wsmc;
-    int64_t wmmc;
+    uint64_t wpmc;
+    uint64_t wsmc;
+    uint64_t wmmc;
 } ;
 
 instance_t *
@@ -77,9 +77,15 @@ instance_new_string(char *str){
     }
 
     // Number of services
-
+    line = strtok_r(NULL,"\n",&endstr);
+    instance->nserv = strtoul(line, NULL, 10);
 
     // services data
+    instance->services = calloc(instance->nmach, sizeof(service_t *));
+    for (int i=0; i< instance->nserv;i++) {
+	line = strtok_r(NULL,"\n",&endstr);
+	instance->services[i] = service_new(line);
+    }
 
     // Number of process
 

@@ -9,8 +9,16 @@ OBJS+=src/machine.o
 HDRS+=include/resource.h
 OBJS+=src/resource.o
 
+HDRS+=include/service.h
+OBJS+=src/service.o
+
+HDRS+=include/process.h
+OBJS+=src/process.o
+
 HDRS+=include/instance.h
 OBJS+=src/instance.o
+
+
 
 .SUFFIXES: .c .o .h
 

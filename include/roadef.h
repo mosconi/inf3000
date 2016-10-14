@@ -17,6 +17,8 @@
 #include "resource.h"
 #include "balance.h"
 #include "machine.h"
+#include "service.h"
+#include "process.h"
 #include "instance.h"
 
 #endif

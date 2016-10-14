@@ -2,7 +2,7 @@
 
 struct resource_t {
     bool transient;
-    int64_t wlc;
+    uint64_t wlc;
 };
 
 resource_t *
@@ -25,7 +25,7 @@ resource_new(char *line){
 
     tok = strtok_r(NULL," ", &endtok);
 
-    r->wlc = strtol(tok,NULL,10);
+    r->wlc = strtoul(tok,NULL,10);
 
     return r;
 }

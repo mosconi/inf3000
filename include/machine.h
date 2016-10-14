@@ -13,20 +13,20 @@ extern "C" {
     void
     machine_destroy(machine_t**);
 
-    int64_t
+    uint64_t
     machine_location(machine_t*);
 
-    int64_t
+    uint64_t
     machine_neigh(machine_t*);
     
-    int64_t
-    machine_cap(machine_t*, int64_t );
+    uint64_t
+    machine_cap(machine_t*, uint64_t );
     
-    int64_t
-    machine_safecap(machine_t*, int64_t );
+    uint64_t
+    machine_safecap(machine_t*, uint64_t );
     
-    int64_t
-    machine_mvcost(machine_t*, int64_t );
+    uint64_t
+    machine_mvcost(machine_t*, uint64_t );
 
 #ifdef __cplusplus
 }
