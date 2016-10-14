@@ -12,7 +12,20 @@ extern "C" {
 
     void
     process_destroy(process_t **);
+
+    uint64_t
+    process_service(process_t *);
+
+    uint64_t
+    process_movecost(process_t *);
+
+    uint64_t
+    process_requirement(process_t *, size_t );
+
+    void
+    process_test(bool);
     
+
 #ifdef __cplusplus
 }
 #endif

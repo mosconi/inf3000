@@ -1,4 +1,4 @@
-CFLAGS=-Iinclude -fPIC -fpic -g -Wall -Werror -pedantic -std=c99
+CFLAGS=-Iinclude -fPIC -fpic -g -Wall -Werror -pedantic -std=c99 -O0 
 LDFLAGS=-L. -lroadef
 OBJS=src/roadef.o 
 HDRS=include/roadef.h include/prelude.h
