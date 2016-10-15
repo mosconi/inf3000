@@ -70,3 +70,38 @@ service_dep(service_t *self, uint64_t idx){
 
 
      
+void
+service_test(bool verbose){
+
+    char *line;
+    service_t *s;
+
+    line = strdup("2 0");
+    s = service_new(line);
+    free(line);
+    assert(s);
+    service_destroy(&s);
+    assert(!s);
+    service_destroy(&s);
+
+    line = strdup("2 0");
+    s = service_new(line);
+    free(line);
+
+    assert(2 == service_spread(s));
+    assert(0 == service_ndeps(s));
+
+    service_destroy(&s);
+
+    line = strdup("1 1 0");
+    s = service_new(line);
+    free(line);
+
+    assert(1 == service_spread(s));
+    assert(1 == service_ndeps(s));
+    assert(0 == service_dep(s, 0));
+
+    service_destroy(&s);
+
+
+}

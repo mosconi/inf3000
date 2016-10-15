@@ -12,6 +12,9 @@ extern "C" {
 
     void
     service_destroy(service_t **);
+
+    void
+    service_test(bool);
     
 #ifdef __cplusplus
 }
