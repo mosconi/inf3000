@@ -16,6 +16,31 @@ extern "C" {
     void
     instance_destroy(instance_t **);
 
+    uint64_t
+    instance_nres(instance_t *);
+
+    uint64_t
+    instance_nmach(instance_t *);
+
+    uint64_t
+    instance_nserv(instance_t *);
+
+    uint64_t
+    instance_nproc(instance_t *);
+
+    uint64_t
+    instance_nbalance(instance_t *);
+
+    uint64_t
+    instance_wpmc(instance_t *);
+
+    uint64_t
+    instance_wsmc(instance_t *);
+
+    uint64_t
+    instance_wmmc(instance_t *);
+
+
     void
     instance_test(bool);
 
