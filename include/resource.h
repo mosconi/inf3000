@@ -13,6 +13,14 @@ extern "C" {
     void
     resource_destroy(resource_t **);
 
+    void
+    resource_test(bool );
+
+    bool
+    resource_transient(resource_t *);
+
+    uint64_t
+    resource_loadcost(resource_t *);
     
 #ifdef __cplusplus
 }

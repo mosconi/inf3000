@@ -29,3 +29,53 @@ resource_new(char *line){
 
     return r;
 }
+
+void
+resource_destroy(resource_t **self_p) {
+    assert(self_p);
+    if (!*self_p) return;
+    resource_t *self = *self_p;
+    free(self);
+    *self_p=NULL;
+}
+
+bool
+resource_transient(resource_t *self) {
+    assert(self);
+    return self->transient;
+}
+
+uint64_t
+resource_loadcost(resource_t *self){
+    assert(self);
+    return self->wlc;
+}
+
+void
+resource_test(bool verbose){
+
+    char *line = strdup("1 100");
+    resource_t *r = resource_new(line);
+    free(line);
+    assert(r);
+    resource_destroy(&r);
+    assert(!r);
+    resource_destroy(&r);
+    line = strdup("1 100");
+    r = resource_new(line);
+    free(line);
+    assert(resource_transient(r));
+    assert(100 == resource_loadcost(r));
+    resource_destroy(&r);
+    line = strdup("0 100");
+    r = resource_new(line);
+    free(line);
+    assert(!resource_transient(r));
+    resource_destroy(&r);
+
+    line = strdup("2 100");
+    r = resource_new(line);
+    free(line);
+    assert(!r);
+
+}
