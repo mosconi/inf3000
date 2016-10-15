@@ -131,8 +131,25 @@ instance_destroy(instance_t** self_p){
     }
     free(self->balance);
     
+    for (size_t i =0 ; i< self->nproc; i++) {
+	process_destroy(&(self->processes[i]));
+    }
     free(self->processes);
+
+    for (size_t i =0 ; i< self->nserv; i++) {
+	service_destroy(&(self->services[i]));
+    }
     free(self->services);
+
+    for (size_t i =0 ; i< self->nmach; i++) {
+	machine_destroy(&(self->machines[i]));
+    }
+    free(self->machines);
+
+    for (size_t i =0 ; i< self->nres; i++) {
+	resource_destroy(&(self->resources[i]));
+    }
+    free(self->resources);
     
     free(self);
     *self_p=NULL;
