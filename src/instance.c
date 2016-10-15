@@ -302,6 +302,10 @@ instance_test(bool verbose) {
     line = strdup(INSTANCE_EXAMPLE2);
     inst = instance_new_string(line);
     free(line);
+    assert(0 == instance_nbalance(inst));
+    assert(1 == instance_wpmc(inst));
+    assert(10 == instance_wsmc(inst));
+    assert(100 == instance_wmmc(inst));
     
     instance_destroy(&inst);
 
