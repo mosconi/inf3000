@@ -35,7 +35,7 @@ roadeftest: src/roadef_test.c libroadef.a ${HDRS}
 
 .PHONY: clean test
 
-test:
+test: roadeftest
 	./roadeftest
 
 clean:
