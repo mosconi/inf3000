@@ -117,3 +117,37 @@ machine_mvcost(machine_t *self, uint64_t mach){
     return self->mov_cost[mach];
 }
     
+
+void
+machine_test(bool verbose){
+
+
+    char *line;
+    machine_t *m;
+
+    line = strdup("1 2 10 1000 8 80 5 4 3 2 0");
+    m = machine_new(2,4,line);
+    free(line);
+    assert(m);
+    machine_destroy(&m);
+    assert(!m);
+    machine_destroy(&m);
+
+    line = strdup("1 2 10 1000 8 80 5 4 3 2 0");
+    m = machine_new(2,4,line);
+    free(line);
+
+    assert(1==machine_neigh(m));
+    assert(2==machine_location(m));
+    assert(10==machine_cap(m, 0));
+    assert(1000==machine_cap(m, 1));
+    assert(8==machine_safecap(m, 0));
+    assert(80==machine_safecap(m, 1));
+    assert(5==machine_mvcost(m, 0));
+    assert(4==machine_mvcost(m, 1));
+    assert(3==machine_mvcost(m, 2));
+    assert(2==machine_mvcost(m, 3));
+
+    machine_destroy(&m);
+
+}

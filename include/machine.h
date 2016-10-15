@@ -28,6 +28,9 @@ extern "C" {
     uint64_t
     machine_mvcost(machine_t*, uint64_t );
 
+    void
+    machine_test(bool);
+    
 #ifdef __cplusplus
 }
 #endif
