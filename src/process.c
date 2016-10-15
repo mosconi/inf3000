@@ -77,6 +77,7 @@ process_requirement(process_t *self, size_t idx) {
 void
 process_test(bool verbose) {
 
+    if (verbose) printf("  * process: ");
     char *line = strdup("0 12 10 1000");
     process_t *p = process_new(2,line);
     free(line);
@@ -92,5 +93,7 @@ process_test(bool verbose) {
     assert(10==process_requirement(p,1));
     assert(1000==process_movecost(p));
     process_destroy(&p);
+
+    if(verbose) printf("OK\n");
 }
     

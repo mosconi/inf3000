@@ -58,7 +58,7 @@ instance_new_string(char *str){
     // Resources data
     instance->resources = calloc(instance->nres, sizeof(resource_t *));
     if(!instance->resources) goto ERROR;
-    for (int i=0; i< instance->nres;i++) {
+    for (uint64_t i=0; i< instance->nres;i++) {
 	line = strtok_r(NULL,"\n",&endstr);
 	instance->resources[i] = resource_new(line);
     }
@@ -69,7 +69,7 @@ instance_new_string(char *str){
 
     // machines data
     instance->machines = calloc(instance->nmach, sizeof(machine_t *));
-    for (int i=0; i< instance->nmach;i++) {
+    for (uint64_t i=0; i< instance->nmach;i++) {
 	line = strtok_r(NULL,"\n",&endstr);
 	instance->machines[i] = machine_new(instance->nres,
 					    instance->nmach,
@@ -82,7 +82,7 @@ instance_new_string(char *str){
 
     // services data
     instance->services = calloc(instance->nmach, sizeof(service_t *));
-    for (int i=0; i< instance->nserv;i++) {
+    for (uint64_t i=0; i< instance->nserv;i++) {
 	line = strtok_r(NULL,"\n",&endstr);
 	instance->services[i] = service_new(line);
     }
@@ -93,16 +93,23 @@ instance_new_string(char *str){
 
     // process data
     instance->processes = calloc(instance->nproc, sizeof(process_t *));
-    for (int i =0; i< instance->nproc; i++) {
+    for (uint64_t i =0; i< instance->nproc; i++) {
 	line = strtok_r(NULL, "\n", &endstr);
 	instance->processes[i] = process_new(instance->nres,line);
     }
 
     // Number of balance costs
     line = strtok_r(NULL, "\n", &endstr);
-    instance->nproc = strtoul ( line, NULL, 10);
+    instance->nbalance = strtoul ( line, NULL, 10);
     
     // balance data
+    instance->balance = calloc(instance->nbalance, sizeof(balance_t *));
+    for (uint64_t i =0; i< instance->nbalance; i++) {
+	line = strtok_r(NULL, "\n", &endstr);
+	instance->balance[i] = balance_new(line);
+	line = strtok_r(NULL, "\n", &endstr);
+	balance_set_cost(instance->balance[i], line);
+    }
 
     // Moves costs
 
@@ -115,11 +122,18 @@ instance_new_string(char *str){
 void
 instance_destroy(instance_t** self_p){
     assert(self_p);
-    if(!self_p) return;
+    if(!*self_p) return;
 
     instance_t *self = *self_p;
 
-
+    for (size_t i =0 ; i< self->nbalance; i++) {
+	balance_destroy(&(self->balance[i]));
+    }
+    free(self->balance);
+    
+    free(self->processes);
+    free(self->services);
+    
     free(self);
     *self_p=NULL;
 }
@@ -150,6 +164,7 @@ instance_test(bool verbose) {
 	"10\n"					\
 	"1 10 100\n"
 
+    if (verbose) printf("  * instance: ");
     char *line;
     instance_t *inst;
 
@@ -166,5 +181,7 @@ instance_test(bool verbose) {
     free(line);
 
     instance_destroy(&inst);
+
+    if(verbose) printf("OK\n");
     
 }

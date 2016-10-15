@@ -24,7 +24,7 @@ service_new(char *line) {
 
     s->deps = calloc(s->ndep,sizeof(uint64_t));
 
-    for (int i = 0; i<s->ndep; i++) {
+    for (uint64_t i = 0; i<s->ndep; i++) {
 	tok = strtok_r(NULL, " " , &endtok);
 	s->deps[i] = strtoul(tok, NULL, 10);
     }
@@ -73,6 +73,7 @@ service_dep(service_t *self, uint64_t idx){
 void
 service_test(bool verbose){
 
+    if (verbose) printf("  * service: ");
     char *line;
     service_t *s;
 
@@ -103,5 +104,5 @@ service_test(bool verbose){
 
     service_destroy(&s);
 
-
+    if (verbose) printf("OK\n");
 }

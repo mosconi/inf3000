@@ -54,6 +54,7 @@ resource_loadcost(resource_t *self){
 void
 resource_test(bool verbose){
 
+    if (verbose) printf("  * resource: ");
     char *line = strdup("1 100");
     resource_t *r = resource_new(line);
     free(line);
@@ -77,5 +78,6 @@ resource_test(bool verbose){
     r = resource_new(line);
     free(line);
     assert(!r);
-
+    
+    if (verbose) printf("OK\n");
 }

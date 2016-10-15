@@ -45,17 +45,17 @@ machine_new(size_t nres, size_t nmach, char *line){
     tok = strtok_r(NULL," ",&endtok);
     m->location = strtol(tok,NULL,10);
 
-    for (int i=0; i< nres; i++){
+    for (uint64_t i=0; i< nres; i++){
 	tok = strtok_r(NULL," ",&endtok);
 	m->cap[i] = strtol(tok,NULL,10);
     }
 
-    for (int i=0; i< nres; i++){
+    for (uint64_t i=0; i< nres; i++){
 	tok = strtok_r(NULL," ",&endtok);
 	m->safecap[i] = strtol(tok,NULL,10);
     }
 
-    for (int i=0; i< nmach; i++){
+    for (uint64_t i=0; i< nmach; i++){
 	tok = strtok_r(NULL," ",&endtok);
 	m->mov_cost[i] = strtol(tok,NULL,10);
     }
@@ -121,7 +121,7 @@ machine_mvcost(machine_t *self, uint64_t mach){
 void
 machine_test(bool verbose){
 
-
+    if (verbose) printf("  * machine: ");
     char *line;
     machine_t *m;
 
@@ -149,5 +149,6 @@ machine_test(bool verbose){
     assert(2==machine_mvcost(m, 3));
 
     machine_destroy(&m);
-
+    
+    if (verbose) printf("OK\n");
 }

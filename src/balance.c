@@ -92,6 +92,7 @@ balance_resource2(balance_t *self) {
 void
 balance_test(bool verbose){
 
+    if (verbose) printf("  * balance: ");
     char *line;
     balance_t *b;
 
@@ -119,6 +120,6 @@ balance_test(bool verbose){
     assert(10 == balance_weightcost(b));
     balance_destroy(&b);
     
-
+    if(verbose) printf("OK\n");
 }
 	
