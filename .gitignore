@@ -31,14 +31,3 @@ TAGS
 *.kdev4
 .kdev4
 
-# CMake temp:
-CMakeCache.txt
-CMakeFiles
-*\.includecache
-external/boost-cmake/libs/math/config/CMakeCache.txt
-external/boost-cmake/libs/math/config/CMakeFiles/CMakeDirectoryInformation.cmake
-external/boost-cmake/libs/math/config/CMakeFiles/Makefile.cmake
-external/boost-cmake/libs/math/config/CMakeFiles/Makefile2
-external/boost-cmake/libs/math/config/CMakeFiles/has_long_double_support.dir/CXX.includecache
-external/boost-cmake/libs/math/config/CMakeFiles/has_long_double_support.dir/has_long_double_support.cpp.o
-external/boost-cmake/libs/math/config/CMakeFiles/has_long_double_support.dir/has_long_double_support.o
