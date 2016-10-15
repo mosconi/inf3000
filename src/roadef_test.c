@@ -10,7 +10,7 @@ main(int argc, char **argv){
     machine_test(verbose);
     service_test(verbose);
     process_test(verbose);
-    //    balance_test(verbose);
+    balance_test(verbose);
     //    instance_test(verbose);
     
 }
