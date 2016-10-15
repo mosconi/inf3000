@@ -1,6 +1,6 @@
 #include "roadef.h"
     
-struct instance_t {
+struct model_t {
     size_t nres;
     resource_t **resources;
     uint64_t *wlc;
@@ -17,8 +17,8 @@ struct instance_t {
     uint64_t wmmc;
 } ;
 
-instance_t *
-instance_new(char *filename){
+model_t *
+model_load(char *filename){
     assert(filename);
     assert(strcmp("",filename));
 
@@ -38,75 +38,75 @@ instance_new(char *filename){
     }
 
     fclose(fp);
-    return instance_new_string(filecontent);
+    return model_new(filecontent);
 }
 
-instance_t *
-instance_new_string(char *str){
+model_t *
+model_new(char *str){
     assert(str);
     assert(strneq("",str));
 
-    instance_t *instance = calloc(1, sizeof(instance_t));
+    model_t *model = calloc(1, sizeof(model_t));
     char *endstr;
 
     // Number of resources
     char *line = strtok_r(str, "\n",&endstr);
-    instance->nres = strtoul(line, NULL, 10);
+    model->nres = strtoul(line, NULL, 10);
 
     // Resources data
-    instance->resources = calloc(instance->nres, sizeof(resource_t *));
-    if(!instance->resources) goto ERROR;
-    for (uint64_t i=0; i< instance->nres;i++) {
+    model->resources = calloc(model->nres, sizeof(resource_t *));
+    if(!model->resources) goto ERROR;
+    for (uint64_t i=0; i< model->nres;i++) {
 	line = strtok_r(NULL,"\n",&endstr);
-	instance->resources[i] = resource_new(line);
+	model->resources[i] = resource_new(line);
     }
 
     // Number of machines
     line = strtok_r(NULL,"\n",&endstr);
-    instance->nmach = strtoul(line, NULL, 10);
+    model->nmach = strtoul(line, NULL, 10);
 
     // machines data
-    instance->machines = calloc(instance->nmach, sizeof(machine_t *));
-    for (uint64_t i=0; i< instance->nmach;i++) {
+    model->machines = calloc(model->nmach, sizeof(machine_t *));
+    for (uint64_t i=0; i< model->nmach;i++) {
 	line = strtok_r(NULL,"\n",&endstr);
-	instance->machines[i] = machine_new(instance->nres,
-					    instance->nmach,
+	model->machines[i] = machine_new(model->nres,
+					    model->nmach,
 					    line);
     }
 
     // Number of services
     line = strtok_r(NULL,"\n",&endstr);
-    instance->nserv = strtoul(line, NULL, 10);
+    model->nserv = strtoul(line, NULL, 10);
 
     // services data
-    instance->services = calloc(instance->nmach, sizeof(service_t *));
-    for (uint64_t i=0; i< instance->nserv;i++) {
+    model->services = calloc(model->nmach, sizeof(service_t *));
+    for (uint64_t i=0; i< model->nserv;i++) {
 	line = strtok_r(NULL,"\n",&endstr);
-	instance->services[i] = service_new(line);
+	model->services[i] = service_new(line);
     }
 
     // Number of process
     line = strtok_r(NULL, "\n", &endstr);
-    instance->nproc = strtoul ( line, NULL, 10);
+    model->nproc = strtoul ( line, NULL, 10);
 
     // process data
-    instance->processes = calloc(instance->nproc, sizeof(process_t *));
-    for (uint64_t i =0; i< instance->nproc; i++) {
+    model->processes = calloc(model->nproc, sizeof(process_t *));
+    for (uint64_t i =0; i< model->nproc; i++) {
 	line = strtok_r(NULL, "\n", &endstr);
-	instance->processes[i] = process_new(instance->nres,line);
+	model->processes[i] = process_new(model->nres,line);
     }
 
     // Number of balance costs
     line = strtok_r(NULL, "\n", &endstr);
-    instance->nbalance = strtoul ( line, NULL, 10);
+    model->nbalance = strtoul ( line, NULL, 10);
     
     // balance data
-    instance->balance = calloc(instance->nbalance, sizeof(balance_t *));
-    for (uint64_t i =0; i< instance->nbalance; i++) {
+    model->balance = calloc(model->nbalance, sizeof(balance_t *));
+    for (uint64_t i =0; i< model->nbalance; i++) {
 	line = strtok_r(NULL, "\n", &endstr);
-	instance->balance[i] = balance_new(line);
+	model->balance[i] = balance_new(line);
 	line = strtok_r(NULL, "\n", &endstr);
-	balance_set_cost(instance->balance[i], line);
+	balance_set_cost(model->balance[i], line);
     }
 
     // Moves costs
@@ -115,24 +115,24 @@ instance_new_string(char *str){
 
     char *tok, *endtok;
     tok = strtok_r(line, " ", &endtok);
-    instance->wpmc = strtoul(tok, NULL, 10);
+    model->wpmc = strtoul(tok, NULL, 10);
     tok = strtok_r(NULL, " ", &endtok);
-    instance->wsmc = strtoul(tok, NULL, 10);
+    model->wsmc = strtoul(tok, NULL, 10);
     tok = strtok_r(NULL, " ", &endtok);
-    instance->wmmc = strtoul(tok, NULL, 10);
+    model->wmmc = strtoul(tok, NULL, 10);
 
-    return instance;
+    return model;
  ERROR:
-    instance_destroy(&instance);
+    model_destroy(&model);
     return NULL;
 }
 
 void
-instance_destroy(instance_t** self_p){
+model_destroy(model_t** self_p){
     assert(self_p);
     if(!*self_p) return;
 
-    instance_t *self = *self_p;
+    model_t *self = *self_p;
 
     for (size_t i =0 ; i< self->nbalance; i++) {
 	balance_destroy(&(self->balance[i]));
@@ -164,7 +164,7 @@ instance_destroy(instance_t** self_p){
 }
 
 uint64_t
-instance_nres(instance_t *self) {
+model_nres(model_t *self) {
 	assert(self);
 
 	return self->nres;
@@ -172,7 +172,7 @@ instance_nres(instance_t *self) {
 
 
 uint64_t
-instance_nmach(instance_t *self) {
+model_nmach(model_t *self) {
 	assert(self);
 
 	return self->nmach;
@@ -180,7 +180,7 @@ instance_nmach(instance_t *self) {
 
 
 uint64_t
-instance_nserv(instance_t *self) {
+model_nserv(model_t *self) {
 	assert(self);
 
 	return self->nserv;
@@ -188,7 +188,7 @@ instance_nserv(instance_t *self) {
 
 
 uint64_t
-instance_nproc(instance_t *self) {
+model_nproc(model_t *self) {
 	assert(self);
 
 	return self->nproc;
@@ -196,7 +196,7 @@ instance_nproc(instance_t *self) {
 
 
 uint64_t
-instance_nbalance(instance_t *self) {
+model_nbalance(model_t *self) {
 	assert(self);
 
 	return self->nbalance;
@@ -204,7 +204,7 @@ instance_nbalance(instance_t *self) {
 
 
 uint64_t
-instance_wpmc(instance_t *self) {
+model_wpmc(model_t *self) {
 	assert(self);
 
 	return self->wpmc;
@@ -212,7 +212,7 @@ instance_wpmc(instance_t *self) {
 
 
 uint64_t
-instance_wsmc(instance_t *self) {
+model_wsmc(model_t *self) {
 	assert(self);
 
 	return self->wsmc;
@@ -220,7 +220,7 @@ instance_wsmc(instance_t *self) {
 
 
 uint64_t
-instance_wmmc(instance_t *self) {
+model_wmmc(model_t *self) {
 	assert(self);
 
 	return self->wmmc;
@@ -229,9 +229,9 @@ instance_wmmc(instance_t *self) {
 
 
 void
-instance_test(bool verbose) {
+model_test(bool verbose) {
 
-#define INSTANCE_EXAMPLE1 ""			\
+#define MODEL_EXAMPLE1 ""			\
 	"2\n"					\
 	"1 100\n"				\
 	"0 100\n"				\
@@ -252,7 +252,7 @@ instance_test(bool verbose) {
 	"10\n"					\
 	"1 10 100\n"
 
-#define INSTANCE_EXAMPLE2 ""			\
+#define MODEL_EXAMPLE2 ""			\
 	"2\n"					\
 	"1 100\n"				\
 	"0 100\n"				\
@@ -272,42 +272,42 @@ instance_test(bool verbose) {
 	"1 10 100\n"
 
 
-    if (verbose) printf("  * instance: ");
+    if (verbose) printf("  * model: ");
     char *line;
-    instance_t *inst;
+    model_t *inst;
 
-    line = strdup(INSTANCE_EXAMPLE1);
-    inst = instance_new_string(line);
+    line = strdup(MODEL_EXAMPLE1);
+    inst = model_new_string(line);
     free(line);
     assert(inst);
-    instance_destroy(&inst);
+    model_destroy(&inst);
     assert(!inst);
-    instance_destroy(&inst);
+    model_destroy(&inst);
 
-    line = strdup(INSTANCE_EXAMPLE1);
-    inst = instance_new_string(line);
+    line = strdup(MODEL_EXAMPLE1);
+    inst = model_new_string(line);
     free(line);
 
-    assert(2 == instance_nres(inst));
-    assert(4 == instance_nmach(inst));
-    assert(2 == instance_nserv(inst));
-    assert(3 == instance_nproc(inst));
-    assert(1 == instance_nbalance(inst));
-    assert(1 == instance_wpmc(inst));
-    assert(10 == instance_wsmc(inst));
-    assert(100 == instance_wmmc(inst));
+    assert(2 == model_nres(inst));
+    assert(4 == model_nmach(inst));
+    assert(2 == model_nserv(inst));
+    assert(3 == model_nproc(inst));
+    assert(1 == model_nbalance(inst));
+    assert(1 == model_wpmc(inst));
+    assert(10 == model_wsmc(inst));
+    assert(100 == model_wmmc(inst));
     
-    instance_destroy(&inst);
+    model_destroy(&inst);
 
-    line = strdup(INSTANCE_EXAMPLE2);
-    inst = instance_new_string(line);
+    line = strdup(MODEL_EXAMPLE2);
+    inst = model_new_string(line);
     free(line);
-    assert(0 == instance_nbalance(inst));
-    assert(1 == instance_wpmc(inst));
-    assert(10 == instance_wsmc(inst));
-    assert(100 == instance_wmmc(inst));
+    assert(0 == model_nbalance(inst));
+    assert(1 == model_wpmc(inst));
+    assert(10 == model_wsmc(inst));
+    assert(100 == model_wmmc(inst));
     
-    instance_destroy(&inst);
+    model_destroy(&inst);
 
     
     if(verbose) printf("OK\n");

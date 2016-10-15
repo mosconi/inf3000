@@ -19,6 +19,6 @@
 #include "service.h"
 #include "process.h"
 #include "balance.h"
-#include "instance.h"
+#include "model.h"
 
 #endif
