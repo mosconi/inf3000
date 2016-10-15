@@ -16,6 +16,9 @@ extern "C" {
     void
     instance_destroy(instance_t **);
 
+    void
+    instance_test(bool);
+
 #ifdef __cplpusplus
 }
 #endif

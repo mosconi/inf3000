@@ -88,10 +88,19 @@ instance_new_string(char *str){
     }
 
     // Number of process
+    line = strtok_r(NULL, "\n", &endstr);
+    instance->nproc = strtoul ( line, NULL, 10);
 
     // process data
+    instance->processes = calloc(instance->nproc, sizeof(process_t *));
+    for (int i =0; i< instance->nproc; i++) {
+	line = strtok_r(NULL, "\n", &endstr);
+	instance->processes[i] = process_new(instance->nres,line);
+    }
 
     // Number of balance costs
+    line = strtok_r(NULL, "\n", &endstr);
+    instance->nproc = strtoul ( line, NULL, 10);
     
     // balance data
 
@@ -113,4 +122,49 @@ instance_destroy(instance_t** self_p){
 
     free(self);
     *self_p=NULL;
+}
+
+
+
+void
+instance_test(bool verbose) {
+
+#define INSTANCE_EXAMPLE ""			\
+	"2\n"					\
+	"1 100\n"				\
+	"0 100\n"				\
+	"4\n"					\
+	"0 0 30 400 16 80 0 1 4 5\n"		\
+	"0 0 10 240 8 160 1 0 3 4\n"		\
+	"1 1 15 100 12 80 4 3 0 2\n"		\
+	"1 2 10 100 8 80 5 4 2 0\n"		\
+	"2\n"					\
+	"2 0\n"					\
+	"1 1 0\n"				\
+	"3\n"					\
+	"0 12 10 1000\n"			\
+	"0 10 20 100\n"				\
+	"1 16 200 1\n"				\
+	"1\n"					\
+	"0 1 20\n"				\
+	"10\n"					\
+	"1 10 100\n"
+
+    char *line;
+    instance_t *inst;
+
+    line = strdup(INSTANCE_EXAMPLE);
+    inst = instance_new_string(line);
+    free(line);
+    assert(inst);
+    instance_destroy(&inst);
+    assert(!inst);
+    instance_destroy(&inst);
+
+    line = strdup(INSTANCE_EXAMPLE);
+    inst = instance_new_string(line);
+    free(line);
+
+    instance_destroy(&inst);
+    
 }

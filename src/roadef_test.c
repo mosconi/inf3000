@@ -11,6 +11,6 @@ main(int argc, char **argv){
     service_test(verbose);
     process_test(verbose);
     balance_test(verbose);
-    //    instance_test(verbose);
+    instance_test(verbose);
     
 }
