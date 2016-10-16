@@ -342,7 +342,7 @@ typedef unsigned int    qbyte;          //  Quad byte = 32 bits
 #endif
 
 //- A number of POSIX and C99 keywords and data types -----------------------
-//   uses uint for array indices; equivalent to unsigned int, but more
+//   uses int for array indices; equivalent to unsigned int, but more
 //  convenient in code. We define it in ufh_prelude.h on systems that do
 //  not define it by default.
 
@@ -358,14 +358,14 @@ typedef unsigned int    qbyte;          //  Quad byte = 32 bits
 #       define vsnprintf _vsnprintf
 #   endif
     typedef unsigned long ulong;
-    typedef unsigned int  uint;
+    typedef unsigned int  int;
 #   if (!defined (__MINGW32__))
     typedef int mode_t;
-    typedef long ssize_t;
+    typedef long sint64_t;
     typedef __int32 int32_t;
     typedef __int64 int64_t;
-    typedef unsigned __int32 uint32_t;
-    typedef unsigned __int64 uint64_t;
+    typedef unsigned __int32 int32_t;
+    typedef unsigned __int64 int64_t;
 #   endif
 #   if (!defined (va_copy))
     //  MSVC does not support C99's va_copy so we use a regular assignment
@@ -373,7 +373,7 @@ typedef unsigned int    qbyte;          //  Quad byte = 32 bits
 #   endif
 #elif (defined (__UTYPE_OSX))
     typedef unsigned long ulong;
-    typedef unsigned int uint;
+    typedef unsigned int int;
 #endif
 
 //- Error reporting ---------------------------------------------------------
@@ -383,7 +383,7 @@ typedef unsigned int    qbyte;          //  Quad byte = 32 bits
 
 static inline void *
     usafe_malloc (
-    size_t size,
+    int64_t size,
     const char *file,
     unsigned line)
 {

@@ -1,14 +1,14 @@
 #include "roadef.h"
 
 struct process_t {
-    uint64_t service;
-    size_t nres;
-    uint64_t *req;
-    uint64_t pmc;
+    int64_t service;
+    int64_t nres;
+    int64_t *req;
+    int64_t pmc;
 };
 
 process_t *
-process_new(size_t nres, char *line) {
+process_new(int64_t nres, char *line) {
     assert(line);
     assert(strneq("",line));
 
@@ -20,14 +20,14 @@ process_new(size_t nres, char *line) {
     p->service = strtoul(tok, NULL, 10);
     
     p->nres = nres;
-    p->req = calloc(nres, sizeof(uint64_t));
+    p->req = calloc(nres, sizeof(int64_t));
 
     if (!p->req) {
 	process_destroy(&p);
 	return NULL;
     }
 
-    for (size_t i=0; i < nres; i++) {
+    for (int64_t i=0; i < nres; i++) {
 	tok = strtok_r(NULL," ",&endtok);
 	p->req[i] = strtoul(tok, NULL, 10);
     }
@@ -52,22 +52,22 @@ process_destroy(process_t **self_p) {
     *self_p = NULL;
 }
 
-uint64_t
+int64_t
 process_service(process_t *self) {
     assert(self);
 
     return self->service;
 }
 
-uint64_t
+int64_t
 process_movecost(process_t *self) {
     assert(self);
 
     return self->pmc;
 }
 
-uint64_t
-process_requirement(process_t *self, size_t idx) {
+int64_t
+process_requirement(process_t *self, int64_t idx) {
     assert(self);
     assert(idx < self->nres);
 

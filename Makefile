@@ -19,8 +19,8 @@ OBJS+=src/process.o
 HDRS+=include/balance.h
 OBJS+=src/balance.o
 
-HDRS+=include/instance.h
-OBJS+=src/instance.o
+HDRS+=include/model.h
+OBJS+=src/model.o
 
 
 

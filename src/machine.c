@@ -1,17 +1,17 @@
 #include "roadef.h"
 
 struct machine_t {	
-    uint64_t location;
-    uint64_t neighbor;	
-    size_t nres;
-    uint64_t *cap;
-    uint64_t *safecap;
-    size_t nmach;
-    uint64_t *mov_cost;
+    int64_t location;
+    int64_t neighbor;	
+    int64_t nres;
+    int64_t *cap;
+    int64_t *safecap;
+    int64_t nmach;
+    int64_t *mov_cost;
 };
 
 machine_t *
-machine_new(size_t nres, size_t nmach, char *line){
+machine_new(int64_t nres, int64_t nmach, char *line){
     assert(nres);
     assert(nmach);
     assert(strcmp("",line));
@@ -21,18 +21,18 @@ machine_new(size_t nres, size_t nmach, char *line){
     m->nres = nres;
     m->nmach = nmach;
 
-    m->cap = calloc(nres, sizeof(uint64_t));
+    m->cap = calloc(nres, sizeof(int64_t));
     if (!m->cap) {
 	machine_destroy(&m);
 	return NULL;
     }
-    m->safecap = calloc(nres, sizeof(uint64_t));
+    m->safecap = calloc(nres, sizeof(int64_t));
     if (!m->safecap) {
 	machine_destroy(&m);
 	return NULL;
     }
 
-    m->mov_cost = calloc(nmach, sizeof(uint64_t));
+    m->mov_cost = calloc(nmach, sizeof(int64_t));
     if (!m->mov_cost) {
 	machine_destroy(&m);
 	return NULL;
@@ -41,23 +41,23 @@ machine_new(size_t nres, size_t nmach, char *line){
     char *endtok, *tok ;
     
     tok = strtok_r(line," ",&endtok);
-    m->neighbor = strtol(tok,NULL,10);
+    m->neighbor = strtoul(tok,NULL,10);
     tok = strtok_r(NULL," ",&endtok);
-    m->location = strtol(tok,NULL,10);
+    m->location = strtoul(tok,NULL,10);
 
-    for (uint64_t i=0; i< nres; i++){
+    for (int64_t i=0; i< nres; i++){
 	tok = strtok_r(NULL," ",&endtok);
-	m->cap[i] = strtol(tok,NULL,10);
+	m->cap[i] = strtoul(tok,NULL,10);
     }
 
-    for (uint64_t i=0; i< nres; i++){
+    for (int64_t i=0; i< nres; i++){
 	tok = strtok_r(NULL," ",&endtok);
-	m->safecap[i] = strtol(tok,NULL,10);
+	m->safecap[i] = strtoul(tok,NULL,10);
     }
 
-    for (uint64_t i=0; i< nmach; i++){
+    for (int64_t i=0; i< nmach; i++){
 	tok = strtok_r(NULL," ",&endtok);
-	m->mov_cost[i] = strtol(tok,NULL,10);
+	m->mov_cost[i] = strtoul(tok,NULL,10);
     }
 
     return m;
@@ -79,38 +79,38 @@ machine_destroy(machine_t **self_p){
     *self_p=NULL;
 }
 
-uint64_t
+int64_t
 machine_location(machine_t *self){
     assert(self);
 
     return self->location;
 }
 
-uint64_t
+int64_t
 machine_neigh(machine_t *self){
     assert(self);
 
     return self->neighbor;
 }
     
-uint64_t
-machine_cap(machine_t *self, uint64_t res){
+int64_t
+machine_cap(machine_t *self, int64_t res){
     assert(self);
     assert(res < self->nres);
 
     return self->cap[res];
 }
     
-uint64_t
-machine_safecap(machine_t *self, uint64_t res){
+int64_t
+machine_safecap(machine_t *self, int64_t res){
     assert(self);
     assert(res<self->nres);
 
     return self->safecap[res];
 }
     
-uint64_t
-machine_mvcost(machine_t *self, uint64_t mach){
+int64_t
+machine_mvcost(machine_t *self, int64_t mach){
     assert(self);
     assert(mach < self->nmach);
 

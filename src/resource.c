@@ -2,7 +2,7 @@
 
 struct resource_t {
     bool transient;
-    uint64_t wlc;
+    int64_t wlc;
 };
 
 resource_t *
@@ -45,7 +45,7 @@ resource_transient(resource_t *self) {
     return self->transient;
 }
 
-uint64_t
+int64_t
 resource_loadcost(resource_t *self){
     assert(self);
     return self->wlc;
@@ -55,7 +55,8 @@ void
 resource_test(bool verbose){
 
     if (verbose) printf("  * resource: ");
-    char *line = strdup("1 100");
+    #define RESOURCE_TEST1 "1 100"
+    char *line = strdup(RESOURCE_TEST1);
     resource_t *r = resource_new(line);
     free(line);
     assert(r);

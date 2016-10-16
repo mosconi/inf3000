@@ -1,10 +1,10 @@
 #include "roadef.h"
 
 struct balance_t {
-    uint64_t resource1;
-    uint64_t resource2;
-    uint64_t target;
-    uint64_t wbc;//weight for balance cost
+    int64_t resource1;
+    int64_t resource2;
+    int64_t target;
+    int64_t wbc;//weight for balance cost
 };
 
 balance_t *
@@ -52,7 +52,7 @@ balance_set_cost(balance_t *self, char *line){
     
 
 int
-balance_cmp(balance_t *self, uint64_t k1, uint64_t k2){
+balance_cmp(balance_t *self, int64_t k1, int64_t k2){
     assert(self);
 
     if (self->resource1 < k1) return -1;
@@ -64,26 +64,26 @@ balance_cmp(balance_t *self, uint64_t k1, uint64_t k2){
     return 0;
 }
 
-uint64_t
+int64_t
 balance_target(balance_t* self) {
     assert(self);
 
     return self->target;
 }
 
-uint64_t
+int64_t
 balance_weightcost(balance_t* self) {
     assert(self);
 
     return self->wbc;
 }
 
-uint64_t
+int64_t
 balance_resource1(balance_t *self) {
     assert(self);
     return self->resource1;
 }
-uint64_t
+int64_t
 balance_resource2(balance_t *self) {
     assert(self);
     return self->resource2;

@@ -19,7 +19,7 @@ extern "C" {
     bool
     resource_transient(resource_t *);
 
-    uint64_t
+    int64_t
     resource_loadcost(resource_t *);
     
 #ifdef __cplusplus

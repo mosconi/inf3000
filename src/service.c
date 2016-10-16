@@ -2,9 +2,9 @@
 
 
 struct service_t {
-    uint64_t spread;
-    size_t ndep;
-    uint64_t *deps;
+    int64_t spread;
+    int64_t ndep;
+    int64_t *deps;
 };
 
 service_t *
@@ -22,9 +22,9 @@ service_new(char *line) {
     tok = strtok_r(NULL, " " , &endtok);
     s->ndep = strtoul(tok, NULL, 10);
 
-    s->deps = calloc(s->ndep,sizeof(uint64_t));
+    s->deps = calloc(s->ndep,sizeof(int64_t));
 
-    for (uint64_t i = 0; i<s->ndep; i++) {
+    for (int64_t i = 0; i<s->ndep; i++) {
 	tok = strtok_r(NULL, " " , &endtok);
 	s->deps[i] = strtoul(tok, NULL, 10);
     }
@@ -46,22 +46,22 @@ service_destroy(service_t **self_p) {
     *self_p = NULL;
 }
 
-uint64_t
+int64_t
 service_spread(service_t *self){
     assert(self);
 
     return self->spread;
 }
 
-uint64_t
+int64_t
 service_ndeps(service_t *self){
     assert(self);
 
     return self->ndep;
 }
 
-uint64_t
-service_dep(service_t *self, uint64_t idx){
+int64_t
+service_dep(service_t *self, int64_t idx){
     assert(self);
     assert(idx < self->ndep);
 

@@ -14,18 +14,18 @@ extern "C" {
     balance_destroy(balance_t **);
 
     int
-    balance_cmp(balance_t *, uint64_t, uint64_t);
+    balance_cmp(balance_t *, int64_t, int64_t);
 
-    uint64_t
+    int64_t
     balance_resource1(balance_t *);
     
-    uint64_t
+    int64_t
     balance_resource2(balance_t *);
     
-    uint64_t
+    int64_t
     balance_target(balance_t *);
 
-    uint64_t
+    int64_t
     balance_weightcost(balance_t *);
 
     void

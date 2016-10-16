@@ -8,19 +8,19 @@ extern "C" {
     typedef struct process_t process_t;
 
     process_t *
-    process_new(size_t, char *);
+    process_new(int64_t, char *);
 
     void
     process_destroy(process_t **);
 
-    uint64_t
+    int64_t
     process_service(process_t *);
 
-    uint64_t
+    int64_t
     process_movecost(process_t *);
 
-    uint64_t
-    process_requirement(process_t *, size_t );
+    int64_t
+    process_requirement(process_t *, int64_t );
 
     void
     process_test(bool);
