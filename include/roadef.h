@@ -20,5 +20,6 @@
 #include "process.h"
 #include "balance.h"
 #include "model.h"
+#include "state.h"
 
 #endif

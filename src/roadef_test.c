@@ -13,5 +13,6 @@ main(int argc, char **argv){
     process_test(verbose);
     balance_test(verbose);
     model_test(verbose);
+    state_test(verbose);
     
 }
