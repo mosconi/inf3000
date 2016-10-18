@@ -15,6 +15,8 @@ struct model_t {
     int64_t wpmc;
     int64_t wsmc;
     int64_t wmmc;
+    int64_t nlocations;
+    int64_t **locations;
 } ;
 
 model_t *
@@ -30,15 +32,18 @@ model_load(char *filename){
     long fsz = ftell(fp);
     rewind(fp);
 
-    char filecontent[fsz+1];
+    char *filecontent=calloc(fsz+1, sizeof(char));
 
     if(1!=fread(filecontent, fsz, 1, fp)) {
 	fclose(fp);
+	free(filecontent);
 	return NULL;
     }
 
     fclose(fp);
-    return model_new(filecontent);
+    model_t * model=  model_new(filecontent);
+    free(filecontent);
+    return model;
 }
 
 model_t *
@@ -65,15 +70,33 @@ model_new(char *str){
     line = strtok_r(NULL,"\n",&endstr);
     model->nmach = strtoul(line, NULL, 10);
 
+    model->nlocations=1;
     // machines data
     model->machines = calloc(model->nmach, sizeof(machine_t *));
     for (int64_t i=0; i< model->nmach;i++) {
 	line = strtok_r(NULL,"\n",&endstr);
 	model->machines[i] = machine_new(model->nres,
-					    model->nmach,
-					    line);
+	  model->nmach,
+	  line);
+	if (model->nlocations < machine_location(model->machines[i])+1)
+	    model->nlocations = machine_location(model->machines[i])+1;
     }
-
+    int64_t *loc=calloc(model->nlocations,sizeof(int64_t));
+    for (int64_t i=0; i< model->nmach;i++) {	
+	loc[machine_location(model->machines[i])]++;
+    }
+    model->locations = calloc(model->nlocations,sizeof(int64_t *));
+    for (int64_t l=0; l<model->nlocations;l++) {
+	model->locations[l]=calloc(loc[l]+1,sizeof(int64_t));
+	model->locations[l][loc[l]--]=-1;
+    }
+    for (int64_t i=0; i< model->nmach;i++) {
+	
+	model->locations[machine_location(model->machines[i])][loc[machine_location(model->machines[i])]--]=i;
+    }
+    free(loc);
+    
+    
     // Number of services
     line = strtok_r(NULL,"\n",&endstr);
     model->nserv = strtoul(line, NULL, 10);
@@ -121,6 +144,8 @@ model_new(char *str){
     tok = strtok_r(NULL, " ", &endtok);
     model->wmmc = strtoul(tok, NULL, 10);
 
+    
+
     return model;
  ERROR:
     model_destroy(&model);
@@ -158,6 +183,11 @@ model_destroy(model_t** self_p){
 	resource_destroy(&(self->resources[i]));
     }
     if(self->resources) free(self->resources);
+
+    for (int64_t i =0 ; i< self->nlocations; i++) {
+	free(self->locations[i]);
+    }
+    if(self->locations) free(self->locations);
     
     free(self);
     *self_p=NULL;
@@ -425,45 +455,6 @@ model_calculate(model_t *self, int64_t procmapsz, int64_t *procmap, int64_t pobj
 void
 model_test(bool verbose) {
 
-#define MODEL_EXAMPLE1 ""			\
-	"2\n"					\
-	"1 100\n"				\
-	"0 10\n"				\
-	"4\n"					\
-	"0 0 30 400 16 80 0 1 4 5\n"		\
-	"0 0 10 240 8 160 1 0 3 4\n"		\
-	"1 1 15 100 12 80 4 3 0 2\n"		\
-	"1 2 10 100 8 80 5 4 2 0\n"		\
-	"2\n"					\
-	"2 0\n"					\
-	"1 1 0\n"				\
-	"3\n"					\
-	"0 12 10 1000\n"			\
-	"0 10 20 100\n"				\
-	"1 6 200 1\n"				\
-	"1\n"					\
-	"0 1 20\n"				\
-	"10\n"					\
-	"1 10 100\n"
-
-#define MODEL_EXAMPLE2 ""			\
-	"2\n"					\
-	"1 100\n"				\
-	"0 100\n"				\
-	"4\n"					\
-	"0 0 30 400 16 80 0 1 4 5\n"		\
-	"0 0 10 240 8 160 1 0 3 4\n"		\
-	"1 1 15 100 12 80 4 3 0 2\n"		\
-	"1 2 10 100 8 80 5 4 2 0\n"		\
-	"2\n"					\
-	"2 0\n"					\
-	"1 1 0\n"				\
-	"3\n"					\
-	"0 12 10 1000\n"			\
-	"0 10 20 100\n"				\
-	"1 16 200 1\n"				\
-	"0\n"					\
-	"1 10 100\n"
 
 
     if (verbose) printf("  * model: ");
