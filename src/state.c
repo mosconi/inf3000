@@ -13,6 +13,9 @@ struct state_t {
     int64_t obj_pmc;
     int64_t obj_smc;
     int64_t obj_mmc;
+
+    int64_t **utilization;
+    int64_t **tr_utilization;
 };
 
 state_t *
