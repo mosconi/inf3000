@@ -1,3 +1,4 @@
+CXXFLAGS=-Iinclude -Iinclude/checker -fPIC -fpic -g -Wall -O0 -std=c++11
 CFLAGS=-Iinclude -fPIC -fpic -g -Wall -Werror -pedantic -std=c99 -O0 -Wextra
 LDFLAGS=-L. -lroadef
 
@@ -28,6 +29,9 @@ OBJS+=src/model.o
 HDRS+=include/state.h
 OBJS+=src/state.o
 
+CHK_HDRS = include/checker/solution_checker.h
+CHK_SRCS = src/checker/solution_checker.cc src/checker/solution_checker_run.cc
+
 .SUFFIXES: .c .o .h
 
 .c.o: ${HDRS}
@@ -44,6 +48,9 @@ roadeftest: src/roadef_test.c libroadef.a ${HDRS}
 roadef: src/roadef.c libroadef.a ${HDRS}
 	${CC} -o $@ src/roadef.c ${CFLAGS} ${LDFLAGS}
 
+checker: ${CHK_SRCS} ${CHK_HDRS}
+	${CXX} -o $@ ${CXXFLAGS} ${CHK_SRCS}
+
 .PHONY: clean test
 
 test: roadeftest
@@ -51,4 +58,4 @@ test: roadeftest
 
 clean:
 	rm -f src/*.o
-	rm -f libroadef.a roadeftest
+	rm -f libroadef.a roadeftest checker roadef

@@ -558,7 +558,7 @@ void DataParser::GetModelVector(size_t size,
                                 vector<T>* model_vector) {
   CHECK_NOTNULL(model_vector);
   model_vector->clear();
-  for (int i = 0; i < size; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     const T new_element(GetNextModelValue(max_value));
     model_vector->push_back(new_element);
   }

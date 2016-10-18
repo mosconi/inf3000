@@ -12,16 +12,16 @@ typedef long long int int64;
 
 namespace roadef_challenge {
 
-typedef int MachineIndex;
-typedef int ServiceIndex;
-typedef int ProcessIndex;
-typedef int LocalProcessIndex;
-typedef int ResourceIndex;
-typedef int NeighborhoodIndex;
-typedef int LocationIndex;
-typedef int NumberOfLocations;
-typedef int BalanceCostIndex;
-typedef int DependencyIndex;
+typedef unsigned int MachineIndex;
+typedef unsigned int ServiceIndex;
+typedef unsigned int ProcessIndex;
+typedef unsigned int LocalProcessIndex;
+typedef unsigned int ResourceIndex;
+typedef unsigned int NeighborhoodIndex;
+typedef unsigned int LocationIndex;
+typedef unsigned int NumberOfLocations;
+typedef unsigned int BalanceCostIndex;
+typedef unsigned int DependencyIndex;
 
 typedef vector<int64> Capacities;
 typedef vector<int> Requirements;
@@ -40,7 +40,7 @@ typedef vector<int> Dependencies;
 template <class T>
 void STLDeleteElements(vector<T*>* elements) {
   CHECK_NOTNULL(elements);
-  for (int i = 0; i < elements->size(); ++i) {
+  for (size_t i = 0; i < elements->size(); ++i) {
     delete elements->at(i);
   }
   elements->clear();
