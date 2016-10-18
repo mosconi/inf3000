@@ -207,6 +207,8 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -455,5 +457,7 @@ typedef int SOCKET;
 #endif
 
 extern char *__progname;
+
+#include "rss.h"
 
 #endif
