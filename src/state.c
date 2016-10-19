@@ -15,6 +15,7 @@ struct state_t {
     int64_t obj_mmc;
 
     int64_t **utilization;
+    int64_t *rutilization;	
     int64_t **tr_utilization;
 };
 
@@ -36,11 +37,28 @@ state_new(model_t *model) {
     state->obj_resources=calloc(state->nres,sizeof(int64_t));
     state->obj_balance=calloc(state->nres,sizeof(int64_t));
 
-    if (!state->procmap_begin ||
+    state->rutilization = calloc(state->nres,sizeof(int64_t));
+    state->utilization = calloc(state->nres,sizeof(int64_t *));
+    state->tr_utilization = calloc(state->nres,sizeof(int64_t *));
+
+    for (int64_t i =0 ; i< state->nres; i++) {
+	state->utilization[i] = calloc(model_nmach(state->model),sizeof(int64_t));
+	state->tr_utilization[i] = calloc(model_nmach(state->model),sizeof(int64_t));
+	if (!state->utilization[i] ||
+	  !state->tr_utilization[i])
+	    	state_destroy(&state);
+	
+    }	
+    
+    if (state && (
+      !state->procmap_begin ||
       !state->procmap_curr ||
       !state->obj_resources ||
       !state->obj_balance ||
-      false)
+      !state->utilization ||
+      !state->rutilization ||	
+      !state->tr_utilization ||
+      false))
 	state_destroy(&state);
 	
     return state;
@@ -54,19 +72,32 @@ state_destroy(state_t **self_p) {
 
     state_t *self = *self_p;
 
-    if (self->procmap_begin)
-	free(self->procmap_begin);
+    if (self->procmap_begin) free(self->procmap_begin);
 
-    if (self->procmap_curr)
-	free(self->procmap_curr);
+    if (self->procmap_curr) free(self->procmap_curr);
 
-    if (self->obj_resources)
-	free(self->obj_resources);
+    if (self->obj_resources) free(self->obj_resources);
 
-    if (self->obj_balance)
-	free(self->obj_balance);
+    if (self->obj_balance) free(self->obj_balance);
 
+    if (self->rutilization) free(self->rutilization);
+    
+    if (self->utilization) {
+	for(int64_t i=0; i< self-> nres ; i++ ) {
+	    if(self->utilization[i])
+		free(self->utilization[i]);
+	}
+	free(self->utilization);	
+    }
 
+    if (self->tr_utilization) {
+	for(int64_t i=0; i< self-> nres ; i++ ) {
+	    if(self->tr_utilization[i])
+		free(self->tr_utilization[i]);
+	}
+	free(self->tr_utilization);	
+    }
+    
     free(self);
     *self_p = NULL;
 
@@ -81,18 +112,39 @@ state_load(state_t *state, char *line){
     
 }
 
-static void
-s_state_swap_procmap(state_t *state){
-    int64_t *t = state->procmap_begin;
-    state->procmap_begin = state->procmap_curr;
-    state->procmap_curr = t;
+
+void
+state_move(state_t *state, int64_t pidx, int64_t midx) {
+    assert(state);
+    assert(pidx < state->nproc);
+    assert(midx <model_nmach(state->model));
+
+    state->procmap_curr[pidx] = midx;
+    state->needs_update=true;			
+}
+
+void
+state_swap(state_t *state, int64_t p1idx, int64_t p2idx) {
+    assert(state);
+    assert(p1idx < state->nproc);
+    assert(p2idx < state->nproc);
+
+    
+    int64_t m = state->procmap_curr[p1idx];
+    state->procmap_curr[p1idx] = state->procmap_curr[p2idx];
+    state->procmap_curr[p2idx] = m;
+    state->needs_update=true;			
 }
 
 
 void
 state_step(state_t *state) {
     assert(state);
-    s_state_swap_procmap(state);
+
+    for (int64_t i=0; i< state->nproc; i++)
+	if (state->procmap_begin[i] != state->procmap_curr[i])
+	    state->procmap_begin[i] = state->procmap_curr[i];
+
     state->needs_update=true;
 }
 
