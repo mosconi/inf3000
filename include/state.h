@@ -13,13 +13,16 @@ extern "C" {
     void
     state_destroy(state_t **);
 
-    void
+    int
     state_load(state_t *, char *);
 
-    void
+    int
+    state_string(state_t *, char *);
+
+    int
     state_move(state_t *, int64_t, int64_t);
 
-    void
+    int
     state_swap(state_t *, int64_t, int64_t);
 
     int64_t
