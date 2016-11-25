@@ -62,4 +62,5 @@ class model:
             tuple(l[1:1+self.numres]),
             l[-1]
         ]) for l in processes ], dtype=_proc )
-        print(self.processes)
+
+        
