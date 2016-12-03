@@ -65,16 +65,22 @@ for r in range(nres):
 
 Wlc=np.array(Wlc)
 nmach = lines.pop(0)[0]
+L=[[] for i in range(nmach)]
+N=[[] for i in range(nmach)]
 
 for m in range(nmach):
     l = lines.pop(0)
-    l.pop(0) # neighborhood
-    l.pop(0) # location
+    N[l.pop(0)].append(m) # neighborhood
+    L[l.pop(0)].append(m) # location
     C.append(l[:nres])
     del(l[:nres])
     SC.append(l[:nres])
     del(l[:nres])
     M.append(l)
+
+L = [l for l in L if l]
+N = [n for n in N if n]
+
     
 C=np.array(C)
 SC=np.array(SC)
@@ -86,13 +92,18 @@ for s in range(nres):
     l = lines.pop(0)
 
 nproc = lines.pop(0)[0]
+S=[[] for i in range(nproc)]
 
 for p in range(nproc):
     l = lines.pop(0)
-    S.append(l.pop(0))
+    S[l.pop(0)].append(p)
     R.append(l[:nres])
     del(l[:nres])
     PMC.append(l[0])
+
+
+
+S = [s for s in S if s]    
 
 R=np.array(R)
 
@@ -111,7 +122,4 @@ u_bar=T.reshape((2,1))*R.T.dot(x_bar)
 
 fun = lambda xi: np.sum(xi*Wlc)
 
-xi=np.array([[R.T.dot(x_bar).T[m,r] - SC[m,r]  for r in range(nres)]for m in range(nmach)])
-
-print(xi)
 
