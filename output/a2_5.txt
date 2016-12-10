@@ -1,0 +1,7 @@
+>> problem size
+>>> resources  12
+>>> machines  50
+>>> process  1000
+>>> services  153
+creating x vars
+creating z- vars
