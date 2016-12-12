@@ -3,15 +3,17 @@
 >>> machines  4
 >>> process  100
 >>> services  79
+>>> neighborhood  1
+>>> locations  4
 creating x vars
 creating z- vars
 creating z+ vars
 starting x[p,m], z-[p,m], z+[p,m]
 constr. all proc assigned
-knapsack
-z*[p,m]
-service constraint
-PMC & MMC
+constr. knapsack + xi
+constr. z*[p,m]
+contr. service
+constr. PMC & MMC
 setting objs
 Changed value of parameter PoolSolutions to 100
    Prev: 10  Min: 1  Max: 2000000000  Default: 10
@@ -21,40 +23,45 @@ Changed value of parameter ObjNumber to 1
    Prev: 0  Min: 0  Max: 2000000000  Default: 0
 Changed value of parameter ObjNumber to 2
    Prev: 1  Min: 0  Max: 2000000000  Default: 0
+save model
+Warning: constraint name "process assigned[0]" has a space
+Warning: default constraint names used to write mps file
+Warning: constraint name "process assigned[0]" has a space
 optimize
 Optimize a model with 1027 rows, 1219 columns and 3643 nonzeros
 Variable types: 19 continuous, 1200 integer (400 binary)
 Coefficient statistics:
   Matrix range     [1e+00, 1e+06]
-  Objective range  [1e+00, 1e+00]
+  Objective range  [1e+00, 1e+01]
   Bounds range     [1e+00, 1e+00]
   RHS range        [1e+00, 5e+06]
-Presolve removed 915 rows and 811 columns
-Presolve time: 0.00s
-Presolved: 112 rows, 408 columns, 1212 nonzeros
 
-Loaded MIP start with objective 1.47782e+06
+---------------------------------------------------------------------------
+Multi-objectives: starting optimization with 3 objectives (2 combined) ...
+---------------------------------------------------------------------------
 
-Variable types: 0 continuous, 408 integer (400 binary)
+Multi-objectives: applying initial presolve ...
+---------------------------------------------------------------------------
 
-Root relaxation: objective 9.555890e+05, 147 iterations, 0.00 seconds
+Presolved: 516 rows and 1216 columns
+---------------------------------------------------------------------------
 
-    Nodes    |    Current Node    |     Objective Bounds      |     Work
- Expl Unexpl |  Obj  Depth IntInf | Incumbent    BestBd   Gap | It/Node Time
+Multi-objectives: optimize objective 1 (weighted) ...
+---------------------------------------------------------------------------
 
-*    0     0               0    955589.00000 955589.000  0.00%     -    0s
+---------------------------------------------------------------------------
 
-Explored 0 nodes (314 simplex iterations) in 0.01 seconds
-Thread count was 4 (of 4 available processors)
+Multi-objectives: optimize objective 2 (PMC) ...
+---------------------------------------------------------------------------
 
-Solution count 2: 955589 1.47782e+06 
-Pool objective bound 955589
 
-Optimal solution found (tolerance 1.00e-04)
-Best objective 9.555890000000e+05, best bound 9.555890000000e+05, gap 0.0000%
+---------------------------------------------------------------------------
+Multi-objectives: solved in 0.07 seconds, solution count 6
+
 Optimization was stopped with status 2
 resource obj 0: 955589
-resource obj 1: 2177979
-PMC            : 74
+resource obj 1: 2320036
+PMC            : 1
 [0, 0, 0, 1, 1, 3, 3, 3, 3, 2, 1, 0, 0, 3, 3, 1, 3, 0, 0, 3, 2, 1, 1, 1, 0, 1, 1, 2, 0, 3, 3, 3, 0, 2, 2, 0, 0, 1, 0, 3, 0, 0, 1, 3, 1, 3, 0, 2, 2, 2, 0, 3, 0, 3, 3, 0, 1, 1, 2, 0, 0, 2, 2, 1, 0, 2, 3, 1, 1, 0, 0, 2, 0, 0, 2, 0, 1, 0, 1, 3, 3, 1, 0, 0, 0, 3, 0, 0, 0, 2, 0, 3, 3, 1, 2, 3, 2, 1, 1, 2]
-[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 1, 2, 1, 1, 2, 3, 0, 0, 2, 1, 2, 3, 3, 2, 2, 0, 1, 0, 0, 0, 2, 1, 2, 0, 2, 2, 0, 2, 3, 2, 3, 2, 1, 0, 1, 1, 2, 3, 3, 0, 1, 0, 0, 0, 1, 3, 0, 3, 0, 0, 1, 0, 1, 1, 0, 1, 0, 3, 0, 0, 1, 2, 2, 3, 3, 1, 3, 2, 2, 1, 2, 3, 0, 3, 0, 1]
+[0, 0, 0, 1, 1, 3, 3, 3, 3, 2, 1, 0, 0, 3, 3, 1, 3, 0, 0, 3, 2, 1, 1, 1, 0, 1, 1, 2, 0, 3, 3, 3, 0, 2, 2, 0, 0, 1, 0, 3, 0, 0, 1, 3, 1, 3, 0, 2, 2, 2, 0, 3, 0, 3, 3, 0, 1, 1, 2, 0, 0, 2, 2, 1, 0, 2, 3, 1, 1, 0, 0, 3, 0, 0, 2, 0, 1, 0, 1, 3, 3, 1, 0, 0, 0, 3, 0, 0, 0, 2, 0, 3, 3, 1, 2, 3, 2, 1, 1, 2]
+['proc 71: 2 -> 3']
