@@ -6,14 +6,14 @@ import numpy as np
 from gurobipy import *
 
 def usage():
-    print("%s -m modelfile -a assignfile\n" % sys.argv[0])
+    print("%s [-n name] -m modelfile -a assignfile\n" % sys.argv[0])
 
 modelfile=None
 assignfile=None
-
+name="roadef"
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:],"m:a:h",["model=","assign=","help"])
+    opts, args = getopt.getopt(sys.argv[1:],"n:m:a:h",["name=","model=","assign=","help"])
 except getopt.GetoptError as err:
     print(err)
     usage()
@@ -27,6 +27,8 @@ for o,a in opts:
         assignfile = a
     elif o in ( "-m", "--model"):
         modelfile = a
+    elif o in ( "-n", "--name"):
+        name = a
     else:
         assert False, "unhandled option"
     
@@ -79,6 +81,7 @@ for m in range(nmach):
     del(l[:nres])
     M.append(l)
 
+# remove empty neighborhood/locations
 L = [l for l in L if l]
 N = [n for n in N if n]
 
@@ -94,7 +97,7 @@ for s in range(nserv):
 
 nproc = lines.pop(0)[0]
 
-S=[[] for i in range(nproc)]
+S=[[] for i in range(nserv)]
 
 for p in range(nproc):
     l = lines.pop(0)
@@ -130,25 +133,21 @@ print(">>> resources ",nres)
 print(">>> machines ",nmach)
 print(">>> process ",nproc)
 print(">>> services ",nserv)
+print(">>> neighborhood ",len(N))
+print(">>> locations ",len(L))
 
-mdl=Model("roadef")
+mdl=Model(name)
 
 mdl.ModelSense = GRB.MINIMIZE
 
 print("creating x vars")
-x = mdl.addVars(nproc,nmach,vtype=GRB.BINARY,name="x")
+x = mdl.addVars(nproc,nmach,vtype=GRB.BINARY,lb=0,ub=1,name="x")
 
 print("creating z- vars")
-z_minus = mdl.addVars(nproc,nmach,name="z-",vtype=GRB.INTEGER)
+z_minus = mdl.addVars(nproc,nmach,name="z-",vtype=GRB.INTEGER,lb=0,ub=1)
 
 print("creating z+ vars")
-z_plus = mdl.addVars(nproc,nmach,name="z+",vtype=GRB.INTEGER)
-
-#print("creating mig vars")
-#mig = mdl.addVars(nproc,nmach,nmach,name="mig",vtype=GRB.INTEGER)
-
-#print("creating z vars")
-#z = mdl.addVars(nproc,name="z",vtype=GRB.BINARY)
+z_plus = mdl.addVars(nproc,nmach,name="z+",vtype=GRB.INTEGER,lb=0,ub=1)
 
 print("starting x[p,m], z-[p,m], z+[p,m]")
 for p in range(nproc):
@@ -162,76 +161,61 @@ u = mdl.addVars(nmach,nres,name="u",lb=0)
 
 resobj = mdl.addVars(nres,name="res_obj",lb=0)
 pmc = mdl.addVar(name="pmc",lb=0)
-#mmc = mdl.addVar(name="mmc",lb=0)
 
-mdl.update()
 
 print("constr. all proc assigned")
-mdl.addConstrs((x.sum(p,'*') == 1 for p in range(nproc)), name="all proc assigned")
+mdl.addConstrs((x.sum(p,'*') == 1 for p in range(nproc)), name="process assigned")
 
-print("knapsack")
+print("constr. knapsack + xi")
 one = [1 for m in range(nmach)]
 for r in range(nres):
     for m in range(nmach):
         v = [x[p,m] for p in range(nproc)]
-        mdl.addConstr(LinExpr(R[:,r],v) == u[m,r])
-        mdl.addConstr(u[m,r] <= C[m,r])
-        mdl.addConstr(u[m,r] - xi[m,r] <= SC[m,r])
+        mdl.addConstr(LinExpr(R[:,r],v) - u[m,r]==0, name="utilization")
+        mdl.addConstr(u[m,r] <= C[m,r],name="cap")
+        mdl.addConstr(u[m,r] - xi[m,r] <= SC[m,r],name="safecap")
     v = [xi[m,r] for m in range(nmach)]
-    mdl.addConstr(resobj[r] == LinExpr(one,v))
+    mdl.addConstr(resobj[r] == quicksum(v), name="obj")
 
-print("z*[p,m]")    
-for p in range(nproc):
-    for m in range(nmach):
-        mdl.addConstr(z_plus[p,m] >= x[p,m] - x_bar[p,m])
-        mdl.addConstr(z_minus[p,m] >= x_bar[p,m] - x[p,m])
+print("constr. z*[p,m]")    
 
-print("service constraint")    
+mdl.addConstrs((z_plus[p,m] >= x[p,m] - x_bar[p,m] for  p in range(nproc) for m in range(nmach) ))
+mdl.addConstrs((z_minus[p,m] >= x_bar[p,m] - x[p,m] for  p in range(nproc) for m in range(nmach)) )
+
+print("contr. service")    
 for s in S:
     mdl.addConstrs((x.sum(p,'*') <=1 for p in s))
 
-#print("migration")
-#for i in range(nmach):
-#    for j in range(nmach):
-#        for p in range(nproc):
-#            mdl.addConstr(mig[p,i,j] >= x_bar[p,i] +  x[p,j] - 1)
-#            mdl.addConstr(mig[p,i,j] <= x_bar[p,i])
-#            mdl.addConstr(mig[p,i,j] <= x[p,j])
 
-print("PMC & MMC")
+print("constr. PMC & MMC")
 mdl.addConstr(pmc == quicksum(PMC[p]*z_plus[p,m] for m in range(nmach) for p in range(nproc)))
-#mdl.addConstr(mmc == quicksum(MMC[i,j]*mig[p,i,j] for i in range(nmach) for j in range(nmach) for p in range(nproc)))
-
 
 print("setting objs")
 
 mdl.update()
 mdl.setParam(GRB.Param.PoolSolutions, 100)
-#mdl.Params.timeLimit=300
+#mdl.Params.timeLimit=3600
 mdl.NumObj=nres+1
 
 
 for r in range(nres):
     mdl.setParam(GRB.Param.ObjNumber,r)
     mdl.ObjNPriority = 10
-#    mdl.ObjNWeight = Wlc[r]
-    mdl.ObjNRelTol = 1
+    mdl.ObjNWeight = Wlc[r]
+    mdl.ObjNABSTol = sum(C[:,r])
     mdl.ObjNName = "resource " + str(r)
-    resobj[r].ObjN=1
+    resobj[r].ObjN=Wlc[r]
 
 mdl.setParam(GRB.Param.ObjNumber,nres)
 mdl.ObjNPriority = 1
-mdl.ObjNRelTol = 1
+#mdl.ObjNABSTol = 
 mdl.ObjNName = "PMC"
-#mdl.ObjNWeight = WPMC
-pmc.ObjN=1
+mdl.ObjNWeight = WPMC
+pmc.ObjN=WPMC
 
-#mdl.setParam(GRB.Param.ObjNumber,nres+1)
-#mdl.ObjNPriority = 1
-#mdl.ObjNRelTol = 1
-#mdl.ObjNName = "MMC"
-#mdl.ObjNWeight = WMMC
-#mmc.ObjN=1
+print("save model")
+mdl.write(name + ".mps")
+mdl.write(name + ".lp")
 
 print("optimize")
 mdl.optimize()
@@ -241,13 +225,15 @@ print('Optimization was stopped with status ' + str(mdl.Status))
 for r in range(nres):
     print("resource obj %d: %d" % (r, resobj[r].X))
 print("PMC            : %d" %pmc.X)
-#print("MMC            : %d" %mmc.X)
 
 solution=[]
 for p in range(nproc):
     for m in range(nmach):
-        if x[p,m].X ==1:
+        if x[p,m].X >0.5 :
             solution.append(m)
 
 print(assign)
 print(solution)
+
+print([ "proc %d: %d -> %d" %(n,k[0],k[1])  for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]], sep="\n")
+
