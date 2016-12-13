@@ -2,6 +2,7 @@
 
 import os, sys, getopt
 import numpy as np
+from time import time
 
 from gurobipy import *
 
@@ -182,15 +183,14 @@ print("constr. z*[p,m]")
 mdl.addConstrs((z_plus[p,m] >= x[p,m] - x_bar[p,m] for  p in range(nproc) for m in range(nmach) ))
 mdl.addConstrs((z_minus[p,m] >= x_bar[p,m] - x[p,m] for  p in range(nproc) for m in range(nmach)) )
 
-print("contr. service")    
+print("constr. services")
 for s in S:
     mdl.addConstrs((x.sum(p,'*') <=1 for p in s))
 
-
-print("constr. PMC & MMC")
+print("constr. PMC")
 mdl.addConstr(pmc == quicksum(PMC[p]*z_plus[p,m] for m in range(nmach) for p in range(nproc)))
 
-print("setting objs")
+print("setting obj")
 
 mdl.update()
 mdl.setParam(GRB.Param.PoolSolutions, 100)
@@ -201,16 +201,14 @@ mdl.NumObj=nres+1
 for r in range(nres):
     mdl.setParam(GRB.Param.ObjNumber,r)
     mdl.ObjNPriority = 10
-    mdl.ObjNWeight = Wlc[r]
     mdl.ObjNABSTol = sum(C[:,r])
     mdl.ObjNName = "resource " + str(r)
-    resobj[r].ObjN=Wlc[r]
+    resobj[r].ObjN=1
 
 mdl.setParam(GRB.Param.ObjNumber,nres)
 mdl.ObjNPriority = 1
 #mdl.ObjNABSTol = 
 mdl.ObjNName = "PMC"
-mdl.ObjNWeight = WPMC
 pmc.ObjN=WPMC
 
 print("save model")
@@ -218,9 +216,13 @@ mdl.write(name + ".mps")
 mdl.write(name + ".lp")
 
 print("optimize")
+_start = time()
 mdl.optimize()
+_elapsed = time() - _start
 
 print('Optimization was stopped with status ' + str(mdl.Status))
+
+print(">>> optimized in %0.2f" % _elapsed )
 
 for r in range(nres):
     print("resource obj %d: %d" % (r, resobj[r].X))
