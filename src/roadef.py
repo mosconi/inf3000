@@ -4,8 +4,6 @@ import os, sys, getopt
 import numpy as np
 from time import time
 
-from gurobipy import *
-
 def usage():
     print("%s [-n name] -m modelfile -a assignfile\n" % sys.argv[0])
 
@@ -137,105 +135,24 @@ print(">>> services ",nserv)
 print(">>> neighborhood ",len(N))
 print(">>> locations ",len(L))
 
-mdl=Model(name)
+# create chain moves
+# intra neighbor
+# intra location
+# inter neighbor
+# inter location
 
-mdl.ModelSense = GRB.MINIMIZE
-
-print("creating x vars")
-x = mdl.addVars(nproc,nmach,vtype=GRB.BINARY,lb=0,ub=1,name="x")
-
-print("creating z- vars")
-z_minus = mdl.addVars(nproc,nmach,name="z-",vtype=GRB.INTEGER,lb=0,ub=1)
-
-print("creating z+ vars")
-z_plus = mdl.addVars(nproc,nmach,name="z+",vtype=GRB.INTEGER,lb=0,ub=1)
-
-print("starting x[p,m], z-[p,m], z+[p,m]")
-for p in range(nproc):
-    for m in range(nmach):
-        x[p,m].start = x_bar[p,m]
-        z_minus[p,m].start =0
-        z_plus[p,m].start =0
-        
-xi = mdl.addVars(nmach,nres,name="xi",lb=0)
-u = mdl.addVars(nmach,nres,name="u",lb=0)
-
-resobj = mdl.addVars(nres,name="res_obj",lb=0)
-pmc = mdl.addVar(name="pmc",lb=0)
+# compute the gain of each move:
+# intra neighbor
+# intra location
+# inter neighbor
+# inter location
 
 
-print("constr. all proc assigned")
-mdl.addConstrs((x.sum(p,'*') == 1 for p in range(nproc)), name="process assigned")
+# while intra neighbor has gain
 
-print("constr. knapsack + xi")
-one = [1 for m in range(nmach)]
-for r in range(nres):
-    for m in range(nmach):
-        v = [x[p,m] for p in range(nproc)]
-        mdl.addConstr(LinExpr(R[:,r],v) - u[m,r]==0, name="utilization")
-        mdl.addConstr(u[m,r] <= C[m,r],name="cap")
-        mdl.addConstr(u[m,r] - xi[m,r] <= SC[m,r],name="safecap")
-    v = [xi[m,r] for m in range(nmach)]
-    mdl.addConstr(resobj[r] == quicksum(v), name="obj")
+# choose the best intra neighbor move
 
-print("constr. z*[p,m]")    
+# recompute the gain for the moved process
 
-mdl.addConstrs((z_plus[p,m] >= x[p,m] - x_bar[p,m] for  p in range(nproc) for m in range(nmach) ))
-mdl.addConstrs((z_minus[p,m] >= x_bar[p,m] - x[p,m] for  p in range(nproc) for m in range(nmach)) )
-
-print("constr. services")
-for s in S:
-    mdl.addConstrs((x.sum(p,'*') <=1 for p in s))
-
-print("constr. PMC")
-mdl.addConstr(pmc == quicksum(PMC[p]*z_plus[p,m] for m in range(nmach) for p in range(nproc)))
-
-print("setting obj")
-
-mdl.update()
-mdl.setParam(GRB.Param.PoolSolutions, 100)
-#mdl.Params.timeLimit=3600
-mdl.NumObj=nres+1
-
-
-for r in range(nres):
-    mdl.setParam(GRB.Param.ObjNumber,r)
-    mdl.ObjNPriority = 10
-    mdl.ObjNABSTol = sum(C[:,r])
-    mdl.ObjNName = "resource " + str(r)
-    resobj[r].ObjN=1
-
-mdl.setParam(GRB.Param.ObjNumber,nres)
-mdl.ObjNPriority = 1
-#mdl.ObjNABSTol = 
-mdl.ObjNName = "PMC"
-pmc.ObjN=WPMC
-
-print("save model")
-mdl.write(name + ".mps")
-mdl.write(name + ".lp")
-
-print("optimize")
-_start = time()
-mdl.optimize()
-_elapsed = time() - _start
-
-print('Optimization was stopped with status ' + str(mdl.Status))
-
-print(">>> optimized in %0.2f" % _elapsed )
-
-for r in range(nres):
-    print("resource obj %d: %d" % (r, resobj[r].X))
-print("PMC            : %d" %pmc.X)
-
-solution=[]
-for p in range(nproc):
-    for m in range(nmach):
-        if x[p,m].X >0.5 :
-            solution.append(m)
-
-print(assign)
-print(solution)
-
-print([ "proc %d: %d -> %d" %(n,k[0],k[1])  for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]], sep="\n")
+# if there is no more nwighbor gain, choose the best intra location
 
