@@ -139,15 +139,16 @@ for n in range(len(N)):
     for f,t in zip(N[n], N[n][1:] + [N[n][0]]):
         intraN[f] = t
 
+print(N)
 print(intraN)
 # intra location
 intraL={}
-print(L)
 for n in range(len(L)):
     print(L[n])
     for f,t in zip(L[n], L[n][1:] + [L[n][0]]):
         intraL[f] = t
 
+print(L)
 print(intraL)
 
 # inter neighbor
@@ -158,7 +159,7 @@ print(intraL)
 # intra neighbor
 gintraN={}
 for p in range(nproc):
-    
+    gintraN[p]=0
 # intra location
 # inter neighbor
 # inter location
