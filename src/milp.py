@@ -193,23 +193,23 @@ mdl.addConstr(pmc == quicksum(PMC[p]*z_plus[p,m] for m in range(nmach) for p in 
 print("setting obj")
 
 mdl.update()
-mdl.setParam(GRB.Param.PoolSolutions, 100)
-#mdl.Params.timeLimit=3600
-mdl.NumObj=nres+1
+mdl.setParam(GRB.Param.PoolSolutions, 1000)
+mdl.Params.timeLimit=7200
+#mdl.NumObj=nres+1
 
 
 for r in range(nres):
-    mdl.setParam(GRB.Param.ObjNumber,r)
-    mdl.ObjNPriority = 10
-    mdl.ObjNABSTol = sum(C[:,r])
-    mdl.ObjNName = "resource " + str(r)
-    resobj[r].ObjN=1
+    #mdl.setParam(GRB.Param.ObjNumber,r)
+    #mdl.ObjPriority = 10
+    #mdl.ObjABSTol = sum(C[:,r])
+    #mdl.ObjName = "resource " + str(r)
+    resobj[r].Obj=1
 
-mdl.setParam(GRB.Param.ObjNumber,nres)
-mdl.ObjNPriority = 1
+#mdl.setParam(GRB.Param.ObjNumber,nres)
+#mdl.ObjPriority = 1
 #mdl.ObjNABSTol = 
-mdl.ObjNName = "PMC"
-pmc.ObjN=WPMC
+#mdl.ObjName = "PMC"
+pmc.Obj=WPMC
 
 print("save model")
 mdl.write(name + ".mps")
