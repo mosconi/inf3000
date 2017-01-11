@@ -120,10 +120,7 @@ S = [s for s in S if s]
 x_bar= np.zeros((nproc,nmach), dtype=np.int32)
 
 f = open(assignfile, "r")
-line = [list(map(int,l.rstrip('\n').split())) for l in f][0]
-assign=line[:]
-for p in range(nproc):
-    x_bar[p,line[p]] = 1
+assign = [list(map(int,l.rstrip('\n').split())) for l in f][0]
 
 T=np.array(T)
 
@@ -137,12 +134,31 @@ print(">>> locations ",len(L))
 
 # create chain moves
 # intra neighbor
+intraN={}
+for n in range(len(N)):
+    for f,t in zip(N[n], N[n][1:] + [N[n][0]]):
+        intraN[f] = t
+
+print(intraN)
 # intra location
+intraL={}
+print(L)
+for n in range(len(L)):
+    print(L[n])
+    for f,t in zip(L[n], L[n][1:] + [L[n][0]]):
+        intraL[f] = t
+
+print(intraL)
+
 # inter neighbor
 # inter location
 
+
 # compute the gain of each move:
 # intra neighbor
+gintraN={}
+for p in range(nproc):
+    
 # intra location
 # inter neighbor
 # inter location
