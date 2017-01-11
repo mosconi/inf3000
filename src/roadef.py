@@ -132,6 +132,19 @@ print(">>> services ",nserv)
 print(">>> neighborhood ",len(N))
 print(">>> locations ",len(L))
 
+# compute assigment utilization
+
+utilization=np.zeros((nmach,nres), dtype=np.int32)
+
+for p in range(nproc):
+    m=assign[p]
+    utilization[m]+=R[p]
+
+
+def computeobj():
+    return utilization - SC
+
+print(utilization)
 # create chain moves
 # intra neighbor
 intraN={}
@@ -154,7 +167,7 @@ print(intraL)
 # inter neighbor
 # inter location
 
-
+print(computeobj())
 # compute the gain of each move:
 # intra neighbor
 gintraN={}
