@@ -12,9 +12,10 @@ def usage():
 modelfile=None
 assignfile=None
 name="roadef"
+outputfile=None
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:],"n:m:a:h",["name=","model=","assign=","help"])
+    opts, args = getopt.getopt(sys.argv[1:],"n:m:a:o:h",["name=","model=","assign=","output=","help"])
 except getopt.GetoptError as err:
     print(err)
     usage()
@@ -30,6 +31,8 @@ for o,a in opts:
         modelfile = a
     elif o in ( "-n", "--name"):
         name = a
+    elif o in ( "-o", "--output"):
+        outputfile = a
     else:
         assert False, "unhandled option"
     
@@ -66,6 +69,7 @@ for r in range(nres):
     T.append(l[0])
     Wlc.append(l[1])
 
+
 Wlc=np.array(Wlc)
 nmach = lines.pop(0)[0]
 
@@ -92,9 +96,14 @@ SC=np.array(SC)
 MMC=np.array(M)
 
 nserv = lines.pop(0)[0]
+spread=[0 for s in range(nserv)]
+sdep={}
 
 for s in range(nserv):
     l = lines.pop(0)
+    spread[s]=l[0]
+    if l[1]>0:
+        sdep[s]=l[2:]
 
 nproc = lines.pop(0)[0]
 
@@ -108,10 +117,16 @@ for p in range(nproc):
     PMC.append(l[0])
 
 nbal = lines.pop(0)[0]
+bT=np.zeros((nres,nres),dtype=np.int32)
+Wbal=np.zeros((nres,nres),dtype=np.int32)
 for b in range(nbal):
     l = lines.pop(0)
+    r1=l[0]
+    r2=l[1]
+    bT[ r1,r2]=l[2]
     l = lines.pop(0)
-    
+    Wbal[r1,r2] = l[0]
+
 WPMC=lines[0][0]
 WSMC=lines[0][1]
 WMMC=lines[0][2]
@@ -131,9 +146,11 @@ T=np.array(T)
 
 print(">> problem size")
 print(">>> resources ",nres)
+print(">>> transisent ",T.sum())
 print(">>> machines ",nmach)
 print(">>> process ",nproc)
 print(">>> services ",nserv)
+print(">>> balances ",nbal)
 print(">>> neighborhood ",len(N))
 print(">>> locations ",len(L))
 
@@ -141,42 +158,87 @@ mdl=Model(name)
 
 mdl.ModelSense = GRB.MINIMIZE
 
-print("creating x vars")
+print("creating x vars",flush=True)
 x = mdl.addVars(nproc,nmach,vtype=GRB.BINARY,lb=0,ub=1,name="x")
 
-print("creating z- vars")
-z_minus = mdl.addVars(nproc,nmach,name="z-",vtype=GRB.INTEGER,lb=0,ub=1)
-
-print("creating z+ vars")
-z_plus = mdl.addVars(nproc,nmach,name="z+",vtype=GRB.INTEGER,lb=0,ub=1)
-
-print("starting x[p,m], z-[p,m], z+[p,m]")
+print("starting x[p,m] as x_bar[p,m]",flush=True)
 for p in range(nproc):
     for m in range(nmach):
         x[p,m].start = x_bar[p,m]
-        z_minus[p,m].start =0
-        z_plus[p,m].start =0
-        
-xi = mdl.addVars(nmach,nres,name="xi",lb=0)
-u = mdl.addVars(nmach,nres,name="u",lb=0)
 
-resobj = mdl.addVars(nres,name="res_obj",lb=0)
-pmc = mdl.addVar(name="pmc",lb=0)
+print("creating z- vars",flush=True)
+z_minus = mdl.addVars(nproc,nmach,name="z-",vtype=GRB.INTEGER,lb=0,ub=1)
+
+print("creating z+ vars",flush=True)
+z_plus = mdl.addVars(nproc,nmach,name="z+",vtype=GRB.INTEGER,lb=0,ub=1)
+
+
+print("creating y",flush=True)
+y = mdl.addVars(nproc,nmach,nmach,vtype=GRB.INTEGER,lb=0,ub=1,name="y")
+
+print("creating t",flush=True)
+t = mdl.addVars(nmach,nmach,vtype=GRB.SEMIINT,lb=0,name="t")
+
+print("creating o",flush=True)
+o = mdl.addVars(nserv,len(L),vtype=GRB.BINARY,name="o")
+
+print("creating g",flush=True)
+g = mdl.addVars(nserv,vtype=GRB.BINARY,name="s")
+
+print("creating h",flush=True)
+h = mdl.addVars(nserv,len(N),vtype=GRB.BINARY,name="h")
+
+print("creating k",flush=True)
+k = mdl.addVars(nproc,len(N),vtype=GRB.BINARY,name="h")
+
+print("creating b",flush=True)
+b = mdl.addVars(nmach,nres,nres,vtype=GRB.SEMIINT,name="b")
+
+print("creating d",flush=True)
+d = mdl.addVars(nmach,nres,name="d",vtype=GRB.SEMIINT,lb=0)
+
+print("creating u",flush=True)
+u = mdl.addVars(nmach,nres,name="u",vtype=GRB.SEMIINT,lb=0,ub=C)
+
+print("creating a",flush=True)
+a = mdl.addVars(nmach,nres,name="a",vtype=GRB.SEMIINT,lb=0,ub=C)
+
+
+print("creating obj vars",flush=True)
+loadcost = mdl.addVars(nres,name="locadcost",vtype=GRB.SEMIINT,obj=Wlc)
+balancecost= mdl.addVars(nres,nres,name="balancecost",vtype=GRB.SEMIINT,obj=Wbal)
+pmc = mdl.addVar(name="pmc",vtype=GRB.SEMIINT,obj=WPMC)
+smc = mdl.addVar(name="smc",vtype=GRB.SEMIINT,obj=WSMC)
+mmc = mdl.addVar(name="mmc",vtype=GRB.SEMIINT,obj=WMMC)
+
+print("model update",flush=True)
+mdl.update()
 
 
 print("constr. all proc assigned")
-mdl.addConstrs((x.sum(p,'*') == 1 for p in range(nproc)), name="process assigned")
+mdl.addConstrs((x.sum(p,'*') == 1 for p in range(nproc)), name="process_assigned")
 
-print("constr. knapsack + xi")
-one = [1 for m in range(nmach)]
+print("constr. utilization")
+mdl.addConstrs((u[m,r] == quicksum(x[p,m]*R[p,r] for p in range(nproc)) for r in range(nres) for m in range(nmach)),name="utilization")
+
+print("constr. util < cap")
+mdl.addConstrs((u[m,r] <= C[m,r] for r in range(nres) for m in range(nmach)),
+               name="cap")
+
+print("constr. avail")
+mdl.addConstrs((a[m,r] == C[m,r] - u[m,r] for r in range(nres) for m in range(nmach)),
+               name="avail")
+
+print("constr. transient")
 for r in range(nres):
-    for m in range(nmach):
-        v = [x[p,m] for p in range(nproc)]
-        mdl.addConstr(LinExpr(R[:,r],v) - u[m,r]==0, name="utilization")
-        mdl.addConstr(u[m,r] <= C[m,r],name="cap")
-        mdl.addConstr(u[m,r] - xi[m,r] <= SC[m,r],name="safecap")
-    v = [xi[m,r] for m in range(nmach)]
-    mdl.addConstr(resobj[r] == quicksum(v), name="obj")
+    if T[r]:
+        mdl.addConstrs((quicksum(x[p,m]*R[p,r] for p in range(nproc)) + quicksum(z_minus[p,m]*R[p,r] for p in range(nproc)) <= C[m,r] for m in range(nmach)),name="transient")
+
+print("constr. overload")
+mdl.addConstrs((u[m,r] - d[m,r] <= SC[m,r] for r in range(nres) for m in range(nmach)),name="overload")
+
+print("constr. loadcost")
+mdl.addConstrs((loadcost[r] == quicksum(d[m,r] for m in range(nmach)) for r in range(nres)), name="loadcost")
 
 print("constr. z*[p,m]")    
 
@@ -184,49 +246,157 @@ mdl.addConstrs((z_plus[p,m] >= x[p,m] - x_bar[p,m] for  p in range(nproc) for m 
 mdl.addConstrs((z_minus[p,m] >= x_bar[p,m] - x[p,m] for  p in range(nproc) for m in range(nmach)) )
 
 print("constr. services")
-for s in S:
-    mdl.addConstrs((x.sum(p,'*') <=1 for p in s))
+mdl.addConstrs((quicksum(x[p,m] for p in S[s])<=1 for s in range(len(S)) for m in range(nmach)), name="service")
+
+print("constr. y[p,i,j]")
+mdl.addConstrs((y[p,i,j] >= z_minus[p,i] + z_plus[p,j] - 1 for p in range(nproc) for i in range(nmach) for j in range(nmach)), name="y")
+#mdl.addConstrs((quicksum(z[p,i,j] for j in range(nmach))
+
+print("constr. t[i,j]=sum(y[p,i,j])")
+mdl.addConstrs((t[i,j]==quicksum(y[p,i,j] for p in range(nproc)) for i in range(nmach) for j in range(nmach)),name="t")
+
+print("constr. o[s,l]")
+for s in range(nserv):
+    for l in range(len(L)):
+        mdl.addConstrs((o[s,l] >= x[p,m] for p in S[s] for m in L[l]),name=("o[%d,%d]"%(s,l)))
+
+mdl.addConstrs((quicksum(o[s,l] for l in range(len(L))) >= spread[s]) for s in range(nserv))
+
+print("constr. k[p,n]")
+mdl.addConstrs((k[p,n] == quicksum(x[p,m] for m in N[n]) for p in range(nproc) for n in range(len(N))),name="k")
+print("constr. g[s]")
+mdl.addConstrs((g[s] == quicksum(z_plus[p,m] for m in range(nmach) for p in S[s]) for s in range(nserv)), name="g")
+
+print("constr. h[s,n]")
+for s in range(nserv):
+    for n in range(len(N)):
+        mdl.addConstrs((h[s,n] >= x[p,m] for p in S[s] for m in N[n]),name=("h[%d,%d]"%(s,l)))
+
+for s in range(nserv):
+    if s in sdep:
+        print((s,sdep[s]))
+        mdl.addConstrs((h[s,n] == h[d,n] for n in range(len(N)) for d in sdep[s]),name=("dep[%d]"%s))
+
+print("constr. b[m,r1,r2]")
+mdl.addConstrs((b[m,r1,r2] >= bT[r1,r2]*a[m,r1] - a[m,r2] for m in range(nmach) for r1 in range(nres) for r2 in range(nres)), name="b")    
+
+mdl.addConstrs((balancecost[r1,r2] == quicksum(b[m,r1,r2] for m in range(nmach)) for r1 in range(nres) for r2 in range(nres)))
 
 print("constr. PMC")
 mdl.addConstr(pmc == quicksum(PMC[p]*z_plus[p,m] for m in range(nmach) for p in range(nproc)))
 
-print("setting obj")
+print("constr. SMC")
+mdl.addConstrs(smc >= g[s] for s in range(nserv))
 
-mdl.update()
-mdl.setParam(GRB.Param.PoolSolutions, 1000)
-mdl.Params.timeLimit=7200
-#mdl.NumObj=nres+1
+print("constr. MMC")
+mdl.addConstr(mmc == quicksum(MMC[i,j]*t[i,j] for i in range(nmach) for j in range(nmach)))
 
 
-for r in range(nres):
-    #mdl.setParam(GRB.Param.ObjNumber,r)
-    #mdl.ObjPriority = 10
-    #mdl.ObjABSTol = sum(C[:,r])
-    #mdl.ObjName = "resource " + str(r)
-    resobj[r].Obj=1
-
-#mdl.setParam(GRB.Param.ObjNumber,nres)
-#mdl.ObjPriority = 1
-#mdl.ObjNABSTol = 
-#mdl.ObjName = "PMC"
-pmc.Obj=WPMC
+mdl.Params.OutputFlag=0
+#mdl.Params.PoolSolutions = 1000
+#mdl.Params.Threads = 1
+#mdl.Params.MIPFocus = 3
+#mdl.Params.Heuristics = 1
 
 print("save model")
 mdl.write(name + ".mps")
 mdl.write(name + ".lp")
+mdl._lastiter = -GRB.INFINITY
+mdl._lastnode = -GRB.INFINITY
 
+
+def cb(model,where):
+    if where == GRB.Callback.POLLING:
+         # Ignore polling callback
+        pass
+    elif where == GRB.Callback.PRESOLVE:
+        # Presolve callback
+        cdels = model.cbGet(GRB.Callback.PRE_COLDEL)
+        rdels = model.cbGet(GRB.Callback.PRE_ROWDEL)
+        if cdels or rdels:
+            print('>>>> PRE: %d columns and %d rows are removed' % (cdels, rdels))
+    elif where == GRB.Callback.SIMPLEX:
+        # Simplex callback
+        itcnt = model.cbGet(GRB.Callback.SPX_ITRCNT)
+        if itcnt - model._lastiter >= 100:
+            model._lastiter = itcnt
+            obj = model.cbGet(GRB.Callback.SPX_OBJVAL)
+            ispert = model.cbGet(GRB.Callback.SPX_ISPERT)
+            pinf = model.cbGet(GRB.Callback.SPX_PRIMINF)
+            dinf = model.cbGet(GRB.Callback.SPX_DUALINF)
+            if ispert == 0:
+                ch = ' '
+            elif ispert == 1:
+                ch = 'S'
+            else:
+                ch = 'P'
+        print('>>>> SPX: %d %g%s %g %g' % (int(itcnt), obj, ch, pinf, dinf))
+    elif where == GRB.Callback.MIP:
+        # General MIP callback
+        nodecnt = model.cbGet(GRB.Callback.MIP_NODCNT)
+        objbst = model.cbGet(GRB.Callback.MIP_OBJBST)
+        objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
+        solcnt = model.cbGet(GRB.Callback.MIP_SOLCNT)
+        if nodecnt - model._lastnode >= 100:
+            model._lastnode = nodecnt
+            actnodes = model.cbGet(GRB.Callback.MIP_NODLFT)
+            itcnt = model.cbGet(GRB.Callback.MIP_ITRCNT)
+            cutcnt = model.cbGet(GRB.Callback.MIP_CUTCNT)
+            print('>>>> MIP: %d %d %d %g %g %d %d' % (nodecnt, actnodes, \
+                                            itcnt, objbst, objbnd, solcnt, cutcnt))
+#        if abs(objbst - objbnd) < 0.1 * (1.0 + abs(objbst)):
+#            print('>>>> Stop early - 10% gap achieved')
+#            model.terminate()
+#        if nodecnt >= 10000 and solcnt:
+#            print('>>>> Stop early - 10000 nodes explored')
+#            model.terminate()
+    elif where == GRB.Callback.MIPSOL:
+        # MIP solution callback
+        nodecnt = model.cbGet(GRB.Callback.MIPSOL_NODCNT)
+        obj = model.cbGet(GRB.Callback.MIPSOL_OBJ)
+        solcnt = model.cbGet(GRB.Callback.MIPSOL_SOLCNT)
+        print(model.cbGetSolution(model._x))
+#        print('>>>>> **** New solution at node %d, obj %g, sol %d, ' \
+#              'x[0] = %g ****' % (nodecnt, obj, solcnt, model._x[0]))
+    elif where == GRB.Callback.MIPNODE:
+        # MIP node callback
+        print('>>>> New node')
+        if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.Status.OPTIMAL:
+            x = model.cbGetNodeRel(model.getVars())
+            model.cbSetSolution(model.getVars(), x)
+    elif where == GRB.Callback.BARRIER:
+        # Barrier callback
+        itcnt = model.cbGet(GRB.Callback.BARRIER_ITRCNT)
+        primobj = model.cbGet(GRB.Callback.BARRIER_PRIMOBJ)
+        dualobj = model.cbGet(GRB.Callback.BARRIER_DUALOBJ)
+        priminf = model.cbGet(GRB.Callback.BARRIER_PRIMINF)
+        dualinf = model.cbGet(GRB.Callback.BARRIER_DUALINF)
+        cmpl = model.cbGet(GRB.Callback.BARRIER_COMPL)
+        print('>>>> barrier: %d %g %g %g %g %g' % (itcnt, primobj, dualobj, \
+                                     priminf, dualinf, cmpl))
+    elif where == GRB.Callback.MESSAGE:
+        # Message callback
+        msg = model.cbGet(GRB.Callback.MSG_STRING)
+        # model._logfile.write(msg)
+
+mdl._x=x
 print("optimize")
 _start = time()
 mdl.optimize()
 _elapsed = time() - _start
 
-print('Optimization was stopped with status ' + str(mdl.Status))
+print('Optimization was stopped with status ' + str(mdl.Status),flush=True)
 
-print(">>> optimized in %0.2f" % _elapsed )
+print(">>> optimized in %0.2f" % _elapsed ,flush=True)
 
 for r in range(nres):
-    print("resource obj %d: %d" % (r, resobj[r].X))
+    print("resource obj %d: %d" % (r, loadcost[r].X))
+for r1 in range(nres):
+    for r2 in range(nres):
+        print("balance (%d,%d): %d"%(r1,r2,balancecost[r1,r2].X))
 print("PMC            : %d" %pmc.X)
+print("SMC            : %d" %smc.X)
+print("MMC            : %d" %mmc.X)
 
 solution=[]
 for p in range(nproc):
@@ -239,3 +409,6 @@ print(solution)
 
 print([ "proc %d: %d -> %d" %(n,k[0],k[1])  for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]], sep="\n")
 
+if outputfile:
+    f = open(outputfile, "w")
+    f.write(' '.join(str(i) for i in solution))
