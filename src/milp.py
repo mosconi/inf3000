@@ -248,9 +248,12 @@ mdl.addConstrs((z_minus[p,m] >= x_bar[p,m] - x[p,m] for  p in range(nproc) for m
 print("constr. services")
 mdl.addConstrs((quicksum(x[p,m] for p in S[s])<=1 for s in range(len(S)) for m in range(nmach)), name="service")
 
-print("constr. y[p,i,j]")
+print("constr. y[p,i,j] >= z- + z+")
 mdl.addConstrs((y[p,i,j] >= z_minus[p,i] + z_plus[p,j] - 1 for p in range(nproc) for i in range(nmach) for j in range(nmach)), name="y")
-#mdl.addConstrs((quicksum(z[p,i,j] for j in range(nmach))
+#print("constr. y[p,i,j] <= z-")
+#mdl.addConstrs((y[p,i,j] <= z_minus[p,i] for p in range(nproc) for i in range(nmach) for j in range(nmach)), name="y_z-")
+#print("constr. y[p,i,j] <= z+")
+#mdl.addConstrs((y[p,i,j] <= z_plus[p,j]  for p in range(nproc) for i in range(nmach) for j in range(nmach)), name="y_z+")
 
 print("constr. t[i,j]=sum(y[p,i,j])")
 mdl.addConstrs((t[i,j]==quicksum(y[p,i,j] for p in range(nproc)) for i in range(nmach) for j in range(nmach)),name="t")
@@ -262,8 +265,9 @@ for s in range(nserv):
 
 mdl.addConstrs((quicksum(o[s,l] for l in range(len(L))) >= spread[s]) for s in range(nserv))
 
-print("constr. k[p,n]")
-mdl.addConstrs((k[p,n] == quicksum(x[p,m] for m in N[n]) for p in range(nproc) for n in range(len(N))),name="k")
+#print("constr. k[p,n]")
+#mdl.addConstrs((k[p,n] == quicksum(x[p,m] for m in N[n]) for p in range(nproc) for n in range(len(N))),name="k")
+
 print("constr. g[s]")
 mdl.addConstrs((g[s] == quicksum(z_plus[p,m] for m in range(nmach) for p in S[s]) for s in range(nserv)), name="g")
 
@@ -275,7 +279,7 @@ for s in range(nserv):
 for s in range(nserv):
     if s in sdep:
         print((s,sdep[s]))
-        mdl.addConstrs((h[s,n] == h[d,n] for n in range(len(N)) for d in sdep[s]),name=("dep[%d]"%s))
+        mdl.addConstrs((h[s,n] <= h[d,n] for n in range(len(N)) for d in sdep[s]),name=("dep[%d]"%s))
 
 print("constr. b[m,r1,r2]")
 mdl.addConstrs((b[m,r1,r2] >= bT[r1,r2]*a[m,r1] - a[m,r2] for m in range(nmach) for r1 in range(nres) for r2 in range(nres)), name="b")    
@@ -292,7 +296,7 @@ print("constr. MMC")
 mdl.addConstr(mmc == quicksum(MMC[i,j]*t[i,j] for i in range(nmach) for j in range(nmach)))
 
 
-mdl.Params.OutputFlag=0
+#mdl.Params.OutputFlag=0
 #mdl.Params.PoolSolutions = 1000
 #mdl.Params.Threads = 1
 #mdl.Params.MIPFocus = 3
