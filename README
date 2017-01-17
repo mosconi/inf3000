@@ -1,9 +1,0 @@
-1. Roadef 2012
-
-## References
-* Project style guide is defined by CLASS (http://rfc.zeromq.org/spec:21).
- * short name: roaddef
- * prefix: rd
-* Licensed under <license name>, see COPYING
-* Language level: C99
-
