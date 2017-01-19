@@ -189,7 +189,7 @@ print("creating h",flush=True)
 h = mdl.addVars(nserv,len(N),vtype=GRB.BINARY,name="h")
 
 print("creating k",flush=True)
-k = mdl.addVars(nproc,len(N),vtype=GRB.BINARY,name="h")
+k = mdl.addVars(nproc,len(N),vtype=GRB.BINARY,name="k")
 
 print("creating b",flush=True)
 b = mdl.addVars(nmach,nres,nres,vtype=GRB.SEMIINT,name="b")
@@ -279,7 +279,8 @@ for s in range(nserv):
 for s in range(nserv):
     if s in sdep:
         print((s,sdep[s]))
-        mdl.addConstrs((h[s,n] <= h[d,n] for n in range(len(N)) for d in sdep[s]),name=("dep[%d]"%s))
+        for _s in sdep[s]:
+            mdl.addConstrs((h[s,n] <= h[_s,n] for n in range(len(N))),name=("dep[%d,%d]"%(s,_s)))
 
 print("constr. b[m,r1,r2]")
 mdl.addConstrs((b[m,r1,r2] >= bT[r1,r2]*a[m,r1] - a[m,r2] for m in range(nmach) for r1 in range(nres) for r2 in range(nres)), name="b")    
@@ -310,83 +311,20 @@ mdl._lastnode = -GRB.INFINITY
 
 
 def cb(model,where):
-    if where == GRB.Callback.POLLING:
-         # Ignore polling callback
-        pass
-    elif where == GRB.Callback.PRESOLVE:
-        # Presolve callback
-        cdels = model.cbGet(GRB.Callback.PRE_COLDEL)
-        rdels = model.cbGet(GRB.Callback.PRE_ROWDEL)
-        if cdels or rdels:
-            print('>>>> PRE: %d columns and %d rows are removed' % (cdels, rdels))
-    elif where == GRB.Callback.SIMPLEX:
-        # Simplex callback
-        itcnt = model.cbGet(GRB.Callback.SPX_ITRCNT)
-        if itcnt - model._lastiter >= 100:
-            model._lastiter = itcnt
-            obj = model.cbGet(GRB.Callback.SPX_OBJVAL)
-            ispert = model.cbGet(GRB.Callback.SPX_ISPERT)
-            pinf = model.cbGet(GRB.Callback.SPX_PRIMINF)
-            dinf = model.cbGet(GRB.Callback.SPX_DUALINF)
-            if ispert == 0:
-                ch = ' '
-            elif ispert == 1:
-                ch = 'S'
-            else:
-                ch = 'P'
-        print('>>>> SPX: %d %g%s %g %g' % (int(itcnt), obj, ch, pinf, dinf))
-    elif where == GRB.Callback.MIP:
+    if where == GRB.Callback.MIP:
         # General MIP callback
         nodecnt = model.cbGet(GRB.Callback.MIP_NODCNT)
         objbst = model.cbGet(GRB.Callback.MIP_OBJBST)
         objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
         solcnt = model.cbGet(GRB.Callback.MIP_SOLCNT)
-        if nodecnt - model._lastnode >= 100:
-            model._lastnode = nodecnt
-            actnodes = model.cbGet(GRB.Callback.MIP_NODLFT)
-            itcnt = model.cbGet(GRB.Callback.MIP_ITRCNT)
-            cutcnt = model.cbGet(GRB.Callback.MIP_CUTCNT)
-            print('>>>> MIP: %d %d %d %g %g %d %d' % (nodecnt, actnodes, \
-                                            itcnt, objbst, objbnd, solcnt, cutcnt))
-#        if abs(objbst - objbnd) < 0.1 * (1.0 + abs(objbst)):
-#            print('>>>> Stop early - 10% gap achieved')
-#            model.terminate()
-#        if nodecnt >= 10000 and solcnt:
-#            print('>>>> Stop early - 10000 nodes explored')
-#            model.terminate()
-    elif where == GRB.Callback.MIPSOL:
-        # MIP solution callback
-        nodecnt = model.cbGet(GRB.Callback.MIPSOL_NODCNT)
-        obj = model.cbGet(GRB.Callback.MIPSOL_OBJ)
-        solcnt = model.cbGet(GRB.Callback.MIPSOL_SOLCNT)
-        print(model.cbGetSolution(model._x))
-#        print('>>>>> **** New solution at node %d, obj %g, sol %d, ' \
-#              'x[0] = %g ****' % (nodecnt, obj, solcnt, model._x[0]))
-    elif where == GRB.Callback.MIPNODE:
-        # MIP node callback
-        print('>>>> New node')
-        if model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.Status.OPTIMAL:
-            x = model.cbGetNodeRel(model.getVars())
-            model.cbSetSolution(model.getVars(), x)
-    elif where == GRB.Callback.BARRIER:
-        # Barrier callback
-        itcnt = model.cbGet(GRB.Callback.BARRIER_ITRCNT)
-        primobj = model.cbGet(GRB.Callback.BARRIER_PRIMOBJ)
-        dualobj = model.cbGet(GRB.Callback.BARRIER_DUALOBJ)
-        priminf = model.cbGet(GRB.Callback.BARRIER_PRIMINF)
-        dualinf = model.cbGet(GRB.Callback.BARRIER_DUALINF)
-        cmpl = model.cbGet(GRB.Callback.BARRIER_COMPL)
-        print('>>>> barrier: %d %g %g %g %g %g' % (itcnt, primobj, dualobj, \
-                                     priminf, dualinf, cmpl))
-    elif where == GRB.Callback.MESSAGE:
-        # Message callback
-        msg = model.cbGet(GRB.Callback.MSG_STRING)
-        # model._logfile.write(msg)
+        if abs(objbst - objbnd) < 0.05 * (1.0 + abs(objbst)):
+            print('>>>> Stop early - 5% gap achieved')
+            model.terminate()
 
 mdl._x=x
 print("optimize")
 _start = time()
-mdl.optimize()
+mdl.optimize(cb)
 _elapsed = time() - _start
 
 print('Optimization was stopped with status ' + str(mdl.Status),flush=True)
@@ -414,5 +352,6 @@ print(solution)
 print([ "proc %d: %d -> %d" %(n,k[0],k[1])  for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]], sep="\n")
 
 if outputfile:
+    print(">>> salvando resposta em %s" % outputfile)
     f = open(outputfile, "w")
     f.write(' '.join(str(i) for i in solution))
