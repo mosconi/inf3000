@@ -52,11 +52,11 @@ T=[]
 Wlc=[]
 M=[]
 C=[]
-SC=[]
+C_bar=[]
 S=[]
 R=[]
-PMC=[]
-MMC=[]
+RHO=[]
+MU=[]
 
 f = open(modelfile, "r")
 
@@ -92,16 +92,16 @@ N = [n for n in N if n]
 
     
 C=np.array(C)
-SC=np.array(SC)
-MMC=np.array(M)
+C_bar=np.array(SC)
+mu=np.array(M)
 
 nserv = lines.pop(0)[0]
-spread=[0 for s in range(nserv)]
+delta=[0 for s in range(nserv)]
 sdep={}
 
 for s in range(nserv):
     l = lines.pop(0)
-    spread[s]=l[0]
+    delta[s]=l[0]
     if l[1]>0:
         sdep[s]=l[2:]
 
@@ -114,7 +114,7 @@ for p in range(nproc):
     S[l.pop(0)].append(p)
     R.append(l[:nres])
     del(l[:nres])
-    PMC.append(l[0])
+    rho.append(l[0])
 
 nbal = lines.pop(0)[0]
 bT=np.zeros((nres,nres),dtype=np.int32)
@@ -188,9 +188,6 @@ g = mdl.addVars(nserv,vtype=GRB.BINARY,name="s")
 print("creating h",flush=True)
 h = mdl.addVars(nserv,len(N),vtype=GRB.BINARY,name="h")
 
-print("creating k",flush=True)
-k = mdl.addVars(nproc,len(N),vtype=GRB.BINARY,name="k")
-
 print("creating b",flush=True)
 b = mdl.addVars(nmach,nres,nres,vtype=GRB.SEMIINT,name="b")
 
@@ -235,7 +232,7 @@ for r in range(nres):
         mdl.addConstrs((quicksum(x[p,m]*R[p,r] for p in range(nproc)) + quicksum(z_minus[p,m]*R[p,r] for p in range(nproc)) <= C[m,r] for m in range(nmach)),name="transient")
 
 print("constr. overload")
-mdl.addConstrs((u[m,r] - d[m,r] <= SC[m,r] for r in range(nres) for m in range(nmach)),name="overload")
+mdl.addConstrs((u[m,r] - d[m,r] <= C_bar[m,r] for r in range(nres) for m in range(nmach)),name="overload")
 
 print("constr. loadcost")
 mdl.addConstrs((loadcost[r] == quicksum(d[m,r] for m in range(nmach)) for r in range(nres)), name="loadcost")
