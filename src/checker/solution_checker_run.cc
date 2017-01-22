@@ -69,10 +69,10 @@ int main(int argc, char **argv) {
 
   if (solution_checker.Check()) {
     const int64 objective_cost = solution_checker.GetObjectiveCost();
-    LG << "Solution is valid. Total objective cost is " << objective_cost
+    LG << "valido"
        << endl;
   } else {
-    LG << "Solution is invalid." << endl;
+    LG << "invalido" << endl;
   }
 
   return 0;
