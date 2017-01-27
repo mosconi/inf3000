@@ -321,11 +321,17 @@ def cb(model,where):
     """
     if where == GRB.Callback.MIPNODE:
         if not hasattr(model, '_objbnd'): model._objbnd = model.cbGet(GRB.Callback.MIPNODE_OBJBND)
-    elif where == GRB.Callback.MIP:
         # General MIP callback
+        print("model._objbnd: " , model._objbnd)
+        print("model._objbnd: " , model.cbGet(GRB.Callback.MIPNODE_OBJBND))
+
+    elif where == GRB.Callback.MIP:
+        if not hasattr(model, '_objbnd'): model._objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
+        # General MIP callback
+        print("model._objbnd: " , model._objbnd)
+        print("model._objbnd: " , model.cbGet(GRB.Callback.MIP_OBJBND))
         objbst = model.cbGet(GRB.Callback.MIP_OBJBST)
-        objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
-        if abs(objbst - objbnd) < 0.05 * (1.0 + abs(objbst)):
+        if abs(objbst - model._objbnd)  < 0.05 * (model._objbnd):
             if verbose: print('>>>> Stop early - 5% gap achieved')
             model.terminate()
 
@@ -342,6 +348,7 @@ if verbose: print('Optimization was stopped with status ' + str(mdl.Status),flus
 if verbose: print(">>> optimized in %0.2f" % _elapsed ,flush=True)
 
 if verbose: print(">>> Optimal value: %d" % mdl.objVal)
+if verbose: print(">>> Optimal value: %d" % mdl._objbnd)
 
 for r in range(nres):
     if verbose: print("resource obj %d: %d" % (r, loadcost[r].X))
