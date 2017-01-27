@@ -15,7 +15,7 @@ name="roadef"
 outputfile=None
 savemodel=False
 verbose=True
-tex=True
+tex=False
 
 try:
     opts, args = getopt.getopt(sys.argv[1:],"tqsn:m:a:o:h",["tex","quiet","save","name=","model=","assign=","output=","help"])
@@ -318,7 +318,6 @@ def cb(model,where):
     if where == GRB.Callback.MIP:
         # General MIP callback
         objbst = model.cbGet(GRB.Callback.MIP_OBJBST)
-        model._objbst = objbst
         objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
         if abs(objbst - objbnd) < 0.05 * (1.0 + abs(objbst)):
             if verbose: print('>>>> Stop early - 5% gap achieved')
