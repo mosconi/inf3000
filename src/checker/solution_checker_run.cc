@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 
   if (solution_checker.Check()) {
     const int64 objective_cost = solution_checker.GetObjectiveCost();
-    LG << "valido"
+    LG << "valido ( " <<objective_cost <<" )"
        << endl;
   } else {
     LG << "invalido" << endl;
