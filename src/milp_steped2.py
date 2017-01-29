@@ -194,6 +194,13 @@ ut = mdl.addVars(nmach,nres,name="ut",vtype=GRB.INTEGER,lb=0,ub=C)
 if verbose: print("creating d",flush=True)
 d = mdl.addVars(nmach,nres,name="d",vtype=GRB.INTEGER,lb=0,ub=C)
 
+if verbose: print("creating f",flush=True)
+f = mdl.addVars(nproc,len(N),name="f",vtype=GRB.BINARY,lb=0,ub=1)
+
+if verbose: print("creating h",flush=True)
+h = mdl.addVars(len(S),len(N),name="h",vtype=GRB.BINARY,lb=0,ub=1)
+
+
 mdl.update()
 
 if verbose: print("constr. utilization")
@@ -218,8 +225,20 @@ mdl.addConstrs((u[m,r] + ut[m,r] <= C[m,r] for r in range(nres) for m in range(n
 if verbose: print("constr. overload (obj)")
 mdl.addConstrs((u[m,r] - d[m,r] <= C_bar[m,r] for r in range(nres) for m in range(nmach)),name="overload")
 
+if verbose: print("constr f+h")
+mdl.addConstrs((f[p,n] == quicksum(x[p,m] for m in N[n]) for p in range(nproc) for n in range(len(N))))
+
+mdl.addConstrs((h[s,n] >= f[p,n] for p in S[s] for s in range(len(S)) for n in range(len(N))))
+
+mdl.addConstrs((h[s,n] <= quicksum(f[p,n] for p in S[s]) for s in range(len(S)) for n in range(len(N))))
+
+
+
+
 mdl.setObjective(quicksum(Wlc[r]*d[m,r] for m in range(nmach) for r in range(nres)) +
                  quicksum(RHO[p]*z[p,m] for m in range(nmach) for p in range(nproc)) , GRB.MINIMIZE)
+
+
 
 def cb(model,where):
     """ Callback
@@ -228,18 +247,30 @@ def cb(model,where):
     qualidade do modelo, em relação a fornecer soluções viáveis.  
     Posteriormente será removido este callback.
     """
-    if where in [ GRB.Callback.MIPSOL , GRB.Callback.MIPNODE ]:
+    if where == GRB.Callback.MIPSOL:
+        val_x = model.cbGetSolution(model._x)
+        val_h = model.cbGetSolution(model._h)
+        # constraint de confito
         for s in ( s for s in range(nserv) if len(S[s])>1):
-            val_x = model.cbGetSolution(model._x)
             for m in range(nmach):
-                if sum(val_x[p,m] for p in S[s])  >1.5:
-                    model.cbLazy(quicksum(model._x[p,m] for p in S[s]) <=1)
+                if sum(val_x[p,m] for p in S[s]) > 1.5:
+                    print("adicionado lazy constraint de conflito de serv %d em %d" %(s,m))
+                    model.cbLazy(quicksum(model._x[p,m] for p in S[s])<=1)
+        # constraint de dependencia
+        for s in (s for s in  range(nserv) if s in sdep):
+            for s_ in sdep[s]:
+                for n in range(len(N)):
+                    if val_h[s,n] > val_h[s_,n]:
+                        print("adicionado lazy constraint de dep entre %d e %d em %d" % (s,s_,n))
+                        model.cbLazy(model._h[s,n] <= model._h[s_,n])
+        
                     
 
 mdl.Params.LazyConstraints=1
+#mdl.Params.PreCrush=1
 mdl.update()
 mdl._x = x
-
+mdl._h = h 
 mdl._z = z
 mdl._u = u
 mdl.optimize(cb)
@@ -262,6 +293,3 @@ if outputfile:
     f.close()
 
 if verbose: print([ "proc %d: %d -> %d" %(n,k[0],k[1])  for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]], sep="\n")
-
-
-sys.exit(0)
