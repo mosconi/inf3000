@@ -216,30 +216,40 @@ mdl.addConstrs((u[m,r] + ut[m,r] <= C[m,r] for r in range(nres) for m in range(n
                name="cap")
 
 if verbose: print("constr. overload (obj)")
-mdl.addConstrs((u[m,r] - d[m,r] <= C_bar[m,r] for r in range(nres) for m in range(nmach)),name="overload")
+mdl.addConstrs((d[m,r] >=  u[m,r] - C_bar[m,r]  for r in range(nres) for m in range(nmach)),name="overload")
 
 
 mdl.setObjective(quicksum(Wlc[r]*d[m,r] for m in range(nmach) for r in range(nres)) +
                  quicksum(RHO[p]*z[p,m] for m in range(nmach) for p in range(nproc)) , GRB.MINIMIZE)
 
 mdl.update()
-mdl.optimize()
+def cb(model,where):
+    if where == GRB.Callback.MIP:
+        objbst = model.cbGet(GRB.Callback.MIP_OBJBST)
+        objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
+        if abs(objbst - objbnd) < 0.05 * (1.0 + abs(objbst)):
+            print('Stop early - 10% gap achieved')
+            model.terminate()
+mdl.optimize(cb)
 
 def validate_solution(X,model):
+    valido= True
     for s in (s for s in range(nserv) if len(S[s])>1):
         for m in range(nmach):
             if sum(x[p,m].X for p in S[s])>1:
                 print("conflito do serviço %s falhou em %d" % (s,m))
+                model.addConstr((quicksum(X[p,m] for p in S[s]) <= 1))
+                valido = False
         o={}
         for l in range(len(L)):
             o[s,l] = any(x[p,m] for p in S[s] for m in L[l])
-            print("o[%d,%d] = %d" % (s,l,o[s,l]))
-        print("sum(o[%d,*]) = %d" % (s,sum(o[s,l] for l in range(len(L)))))
         if sum(o[s,l] for l in range(len(L))) < delta[s]:
             print("spread do serviço %s falhou %d < %d" %(s,sum(o[s,l] for l in range(len(L))), delta[s]))
+    return valido
             
 
-validate_solution(x,mdl)
+while not validate_solution(x,mdl):
+    mdl.optimize(cb)
 
 print(" obj = %0.3f" % mdl.objVal)
 
