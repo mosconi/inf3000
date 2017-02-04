@@ -16,9 +16,10 @@ outputfile=None
 savemodel=False
 verbose=True
 tex=False
+gap = None
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:],"tqsn:m:a:o:h",["tex","quiet","save","name=","model=","assign=","output=","help"])
+    opts, args = getopt.getopt(sys.argv[1:],"tqsn:m:a:o:hg:",["tex","quiet","save","name=","model=","assign=","output=","help","gap="])
 except getopt.GetoptError as err:
     print(err)
     usage()
@@ -43,6 +44,8 @@ for o,a in opts:
         verbose=False
     elif o in ( "-t", "--tex"):
         tex=True
+    elif o in ( "-g", "--gap"):
+        gap = float(a)
     else:
         assert False, "unhandled option"
     
@@ -223,13 +226,15 @@ mdl.setObjective(quicksum(Wlc[r]*d[m,r] for m in range(nmach) for r in range(nre
                  quicksum(RHO[p]*z[p,m] for m in range(nmach) for p in range(nproc)) , GRB.MINIMIZE)
 
 mdl.update()
+#mdl.Params.OutputFlag = 0
 def cb(model,where):
     if where == GRB.Callback.MIP:
-        objbst = model.cbGet(GRB.Callback.MIP_OBJBST)
-        objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
-        if abs(objbst - objbnd) < 0.05 * (1.0 + abs(objbst)):
-            print('Stop early - 10% gap achieved')
-            model.terminate()
+        if gap:
+            objbst = model.cbGet(GRB.Callback.MIP_OBJBST)
+            objbnd = model.cbGet(GRB.Callback.MIP_OBJBND)
+            if abs(objbst - objbnd) < 0.01 *gap* (1.0 + abs(objbst)):
+                print('Stop early - 10% gap achieved')
+                model.terminate()
 mdl.optimize(cb)
 
 def validate_solution(X,model):
