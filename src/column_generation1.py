@@ -6,7 +6,8 @@ from time import time
 
 from gurobipy import *
 
-np.set_printoptions(linewidth=200)
+rows, columns = os.popen('stty size', 'r').read().split()
+np.set_printoptions(linewidth=int(columns)-2)
 
 def usage():
     print("%s [-n name] [-o outputfile ] [-s] [-q] -m modelfile -a assignfile\n" % sys.argv[0])
@@ -177,12 +178,12 @@ lbd=[[] for m in range(nmach)]
 q=[[] for m in range(nmach)]
 
 for m in range(nmach):
-    lbd[m].append(np.array([assign[p]==m for p in range(nproc)],dtype=np.int32))
-    q[m].append(master_mdl.addVars(nproc,obj=1,vtype=GRB.BINARY,name="q_%d[0]"%m))
+    lbd[m].append(master_mdl.addVar(obj=1,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
+    q[m].append(np.array([assign[p]==m for p in range(nproc)],dtype=np.int32))
 
 master_mdl.update()
 c_alloc=master_mdl.addConstrs(
-    (quicksum(q[m][_a][p]*lbd[m][_a][p] for m in range(nmach) for _a in range(len(q[m]))) == 1 for p in range(nproc)),
+    (quicksum(q[m][_a][p]*lbd[m][_a] for m in range(nmach) for _a in range(len(lbd[m]))) == 1 for p in range(nproc)),
     name="alloc")
 
 master_mdl.update()
@@ -191,7 +192,6 @@ mach_mdl={}
 for k in range(5):
 
     relax_mdl = master_mdl.relax()
-
     relax_mdl.Params.OutputFlag=0
     relax_mdl.optimize()
 
@@ -202,6 +202,7 @@ for k in range(5):
 
     for m in range(nmach):
         print("maquina %d" % m)
+        
         mach_mdl[m]=Model("machine_%d" % m)
         mach_mdl[m].ModelSense=GRB.MINIMIZE
 
@@ -244,17 +245,21 @@ for k in range(5):
         for r in range(nres):
             if verbose: print("resource obj %d: %d" % (r, d[r].X))
 
-        lbd[m].append(np.array([1*(x[p].X>.5) for p in range(nproc)]))
+        q[m].append(np.array([1*(x[p].X>.5) for p in range(nproc)]))
         col = Column()
-        col.addTerms(lbd[m][-1],
+        col.addTerms(q[m][-1],
                      [c_alloc[p] for p in range(nproc)])
-        q[m].append(master_mdl.addVar(obj=1,vtype=GRB.INTEGER,name="q_%d[%d"%(m,len(lbd)-1)))
+        lbd[m].append(master_mdl.addVar(obj=1,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd)-1)))
         master_mdl.update()
 
-    master_mdl.optimize()
+
+master_mdl.optimize()
 
 for m in range(nmach):
     print("máquina %d"%m)
-    print(len(lbd[m]))
-    for _a in range(len(lbd[m])):
-        print(lbd[m][_a])
+    print(np.array([[q[m][_a][p] for p in range(nproc)]for _a in range(len(q[m]))],dtype=np.int32))
+    print(np.array([lbd[m][_a].X for _a in range(len(lbd[m]))]))
+
+
+
+np.savez("npdata",R=R,C_bar=C_bar,lbd=q[0][0] )
