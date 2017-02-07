@@ -178,6 +178,7 @@ lbd=[[] for m in range(nmach)]
 q=[[] for m in range(nmach)]
 
 for m in range(nmach):
+    # TODO: adicionar aqui o calculo da contribuição da máquina no objetivo
     lbd[m].append(master_mdl.addVar(obj=1,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
     q[m].append(np.array([assign[p]==m for p in range(nproc)],dtype=np.int32))
 
@@ -249,6 +250,7 @@ for k in range(5):
         col = Column()
         col.addTerms(q[m][-1],
                      [c_alloc[p] for p in range(nproc)])
+        # TODO: adicionar aqui o calculo da contribuição da máquina no objetivo
         lbd[m].append(master_mdl.addVar(obj=1,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd)-1)))
         master_mdl.update()
 
