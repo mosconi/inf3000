@@ -179,13 +179,26 @@ q=[[] for m in range(nmach)]
 
 for m in range(nmach):
     # TODO: adicionar aqui o calculo da contribuição da máquina no objetivo
-    lbd[m].append(master_mdl.addVar(obj=1,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
     q[m].append(np.array([assign[p]==m for p in range(nproc)],dtype=np.int32))
+    _util = (R*q[m][0].reshape(nproc,1)).sum(axis=0) 
+    _obj1= _util - C_bar[m]
+    _obj1[_obj1<0]=0
 
+    _avail = C[m] - _util
+    _obj2=np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(nres)],dtype=np.int32)
+    _obj2[_obj2<0] = 0
+    
+    _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum()
+
+    lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
+
+    
 master_mdl.update()
-c_alloc=master_mdl.addConstrs(
-    (quicksum(q[m][_a][p]*lbd[m][_a] for m in range(nmach) for _a in range(len(lbd[m]))) == 1 for p in range(nproc)),
-    name="alloc")
+p_alloc=master_mdl.addConstrs(
+    (quicksum(q[m][_a][p]*lbd[m][_a] for m in range(nmach) for _a in range(len(lbd[m]))) == 1 for p in range(nproc)), name="p_alloc")
+m_assign = master_mdl.addConstrs((quicksum(lbd[m][_a] for _a in range(len(lbd[m])))==1 for m in range(nmach)),name="m_assign")
+
+
 
 master_mdl.update()
 
@@ -198,8 +211,8 @@ for k in range(5):
 
     pi = [c.Pi for c in relax_mdl.getConstrs()]
 
-    print(len(pi))
-    print(pi)
+    #    print(len(pi))
+    #    print(pi)
 
     for m in range(nmach):
         print("maquina %d" % m)
@@ -212,18 +225,20 @@ for k in range(5):
             x[p].start=0
             
         u=mach_mdl[m].addVars(nres,lb=0,ub=C[m],name="u",vtype=GRB.INTEGER)
-        d=mach_mdl[m].addVars(nres,lb=0,ub=C[m],name="d",vtype=GRB.INTEGER,obj=Wlc)
+        d=mach_mdl[m].addVars(nres,lb=0,ub=C[m],name="d",vtype=GRB.INTEGER)
         a=mach_mdl[m].addVars(nres,lb=0,ub=C[m],name="a",vtype=GRB.INTEGER)
 
-        b=mach_mdl[m].addVars(nres,nres,lb=0,name="b",vtype=GRB.INTEGER,obj=Wbal)
+        b=mach_mdl[m].addVars(nres,nres,lb=0,name="b",vtype=GRB.INTEGER)
+        
+        obj1 = mach_mdl[m].addVar(lb=0,name="obj1",vtype=GRB.INTEGER,obj=1)
+        obj2 = mach_mdl[m].addVar(lb=0,name="obj2",vtype=GRB.INTEGER,obj=1)
+        obj3 = mach_mdl[m].addVar(lb=0,name="obj3",vtype=GRB.INTEGER,obj=1)
 
         mach_mdl[m].update()
 
-        print([ sum(R[p,r]*x[p].start for p in range(nproc)) -C_bar[m,r] for r in range(nres)])
-
         beta= np.array(RHO,copy=True) 
         for p in [i for i in range(nproc) if i not in mach_assign[m]]:
-            beta[p]+=MU[assign[p],m] - pi[p]
+            beta[p]+=MU[assign[p],m]
 
         mach_mdl[m].addConstrs((u[r] == quicksum(R[p,r]*x[p] for p in range(nproc)) for r in range(nres)), name="util_%d" % m)
 
@@ -233,13 +248,13 @@ for k in range(5):
     
         mach_mdl[m].addConstrs((d[r] >= u[r] - C_bar[m,r] for r in range(nres)),name="overload_%d" % m)
         mach_mdl[m].update()
-    
-        mach_mdl[m].setObjective(
-            quicksum(d[r] for r in range(nres)) +
-            quicksum(b[r1,r2] for r1 in range(nres) for r2 in range(nres)) +
-            quicksum(beta[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]) +
-            1
-        )
+
+        mach_mdl[m].addConstr(obj1 == quicksum(Wlc[r]*d[r] for r in range(nres)))
+        mach_mdl[m].addConstr(obj2 == quicksum(Wbal[r1,r2]*b[r1,r2] for r1 in range(nres) for r2 in range(nres)) )
+        mach_mdl[m].addConstr(obj3 == quicksum(beta[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
+        
+        mach_mdl[m].setObjective(obj1 + obj2 + obj3 -
+        quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         mach_mdl[m].Params.OutputFlag=0
         mach_mdl[m].optimize()
         print("maq %d: obj: %0.2f" % (m,mach_mdl[m].ObjVal))
@@ -249,9 +264,11 @@ for k in range(5):
         q[m].append(np.array([1*(x[p].X>.5) for p in range(nproc)]))
         col = Column()
         col.addTerms(q[m][-1],
-                     [c_alloc[p] for p in range(nproc)])
+                     [p_alloc[p] for p in range(nproc)])
+        col.addTerms([1], [m_assign[m]])
+
         # TODO: adicionar aqui o calculo da contribuição da máquina no objetivo
-        lbd[m].append(master_mdl.addVar(obj=1,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd)-1)))
+        lbd[m].append(master_mdl.addVar(obj=(obj1.X + obj2.X + obj3.X),vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd)-1)))
         master_mdl.update()
 
 
@@ -261,7 +278,3 @@ for m in range(nmach):
     print("máquina %d"%m)
     print(np.array([[q[m][_a][p] for p in range(nproc)]for _a in range(len(q[m]))],dtype=np.int32))
     print(np.array([lbd[m][_a].X for _a in range(len(lbd[m]))]))
-
-
-
-np.savez("npdata",R=R,C_bar=C_bar,lbd=q[0][0] )
