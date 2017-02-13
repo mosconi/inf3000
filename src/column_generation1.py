@@ -19,6 +19,8 @@ outputfile=None
 savemodel=False
 verbose=True
 tex=True
+epslon = 10^-1
+
 
 try:
     opts, args = getopt.getopt(sys.argv[1:],"tqsn:m:a:o:h",["tex","quiet","save","name=","model=","assign=","output=","help"])
@@ -204,19 +206,24 @@ p_alloc=master_mdl.addConstrs(
 m_assign = master_mdl.addConstrs((quicksum(lbd[m][_a] for _a in range(len(lbd[m])))==1 for m in range(nmach)),name="m_assign")
 
 mach_mdl={}
-for k in range(nproc * nmach):
-
+last_var=None
+continue_condition = True
+k = 0 
+while continue_condition:
+    
     master_mdl.update()     # atualiza antes de relaxar
     relax_mdl = master_mdl.relax()
     relax_mdl.Params.OutputFlag=0 # não imprime saída
     relax_mdl.optimize()
 
+    rc = [(v.VarName, v.RC) for v in relax_mdl.getVars()]
+    print(rc)
     pi = [relax_mdl.getConstrByName("p_alloc[%d]" % p ).Pi for p in range(nproc)]
 
     #print(pi[0])
 
     for m in range(nmach):
-        #print("maquina %d, round %d" % (m,k))
+        print("maquina %d, round %d" % (m,k))
         
         alpha = relax_mdl.getConstrByName("m_assign[%d]"%m).Pi
 
@@ -255,7 +262,7 @@ for k in range(nproc * nmach):
         mach_mdl[m].addConstr(obj3 == quicksum(WPMC*RHO[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         mach_mdl[m].addConstr(obj5 == quicksum(WMMC*MU[assign[p],m]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         
-        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5-
+        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5 -
         quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         mach_mdl[m].Params.OutputFlag=0
         mach_mdl[m].optimize()
@@ -263,13 +270,37 @@ for k in range(nproc * nmach):
         #for r in range(nres):
             #if verbose: print("resource obj %d: %d" % (r, d[r].X))
 
+        print(np.array([x[p].X for p in range(nproc)] ))
+
 
         print(mach_mdl[m].ObjVal - alpha)
+        print(obj1.X + obj2.X + obj3.X + obj5.X - alpha)
         mach_mdl[m]._test = mach_mdl[m].ObjVal - alpha
+
         if mach_mdl[m].ObjVal > alpha:
             continue
 
-        q[m].append(np.array([1*(x[p].X>.5) for p in range(nproc)]))
+        novo_q = np.array([1*(x[p].X>.5) for p in range(nproc)])
+        if next((True for i in q[m] if np.array_equal(i, novo_q)), False):
+            print("coluna já existe")
+            continue
+
+        _util = (R*novo_q.reshape(nproc,1)).sum(axis=0) 
+        _obj1= _util - C_bar[m]
+        _obj1[_obj1<0]=0
+        
+        _avail = C[m] - _util
+        _obj2=np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(nres)],dtype=np.int32)
+        _obj2[_obj2<0] = 0
+    
+        _obj3 = RHO*novo_q
+
+        _obj5 = MU[assign,m]
+
+        _v = sum([pi[p]*novo_q[p] for p in range(nproc) if p not in mach_assign[m]])
+        _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (WPMC*_obj3).sum() + (WMMC*_obj5).sum()
+
+        q[m].append(novo_q)
         col = Column()
    
         col.addTerms(q[m][-1],
@@ -277,13 +308,29 @@ for k in range(nproc * nmach):
         
         col.addTerms([1], [m_assign[m]])
 
-        # TODO: adicionar aqui o calculo da contribuição da máquina no objetivo
-        lbd[m].append(master_mdl.addVar(obj=(obj1.X + obj2.X + obj3.X + obj5.X),vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd)-1), column=col))
-        master_mdl.update()
-        # algo como : col.Pi  <-- custo reduzido da coluna
-        # col.Pi == Obj(m)
-    if all([mach_mdl[m]._test > 0 for m in range(nmach)]):
-        break
+        print("  obj calculado %12d"%_obj)
+        print( _obj1)
+        print( _obj2)
+        print( _obj3)
+        print(_obj5)
+        print("  obj obtido       %12.2f"% (obj1.X + obj2.X + obj3.X + obj5.X))
+        print("                   %12.2f"% obj1.X)
+        print("                   %12.2f"% obj2.X)
+        print("                   %12.2f"% obj3.X)
+        print("                   %12.2f"% obj5.X)
+        print("  pi               %12.2f"% _v)
+        print("  alpha            %12.2f"% alpha)
+        print("  delta:           %12.2f" % (_obj - (obj1.X + obj2.X + obj3.X + obj5.X)))
+        lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd[m])), column=col))
+        last_var=lbd[m][-1]
+        # algo como : col.rc  <-- custo reduzido da coluna
+        # col.rc == Obj(m)
+    
+    continue_condition = all([mach_mdl[m]._test < - epslon for m in range(nmach)])
+    k+=1
+
+    if k>=2:
+        continue_condition = False
 
 
 
