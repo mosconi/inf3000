@@ -217,7 +217,7 @@ while continue_condition:
     relax_mdl.optimize()
 
     rc = [(v.VarName, v.RC) for v in relax_mdl.getVars()]
-    print(rc)
+    print("  RC", rc)
     pi = [relax_mdl.getConstrByName("p_alloc[%d]" % p ).Pi for p in range(nproc)]
 
     #print(pi[0])
@@ -262,19 +262,16 @@ while continue_condition:
         mach_mdl[m].addConstr(obj3 == quicksum(WPMC*RHO[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         mach_mdl[m].addConstr(obj5 == quicksum(WMMC*MU[assign[p],m]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         
-        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5 -
-        quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
+        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5
+                                 - quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]) 
+                                 + quicksum((WPMC*RHO[p])*(1-x[p]) for p in [p for p in range(nproc) if p in mach_assign[m]])
+        )
         mach_mdl[m].Params.OutputFlag=0
         mach_mdl[m].optimize()
         #print("maq %d: obj: %0.2f alpha: %0.2f --> %0.2f" % (m,mach_mdl[m].ObjVal,alpha ,mach_mdl[m].ObjVal - alpha))
         #for r in range(nres):
             #if verbose: print("resource obj %d: %d" % (r, d[r].X))
 
-        print(np.array([x[p].X for p in range(nproc)] ))
-
-
-        print(mach_mdl[m].ObjVal - alpha)
-        print(obj1.X + obj2.X + obj3.X + obj5.X - alpha)
         mach_mdl[m]._test = mach_mdl[m].ObjVal - alpha
 
         if mach_mdl[m].ObjVal > alpha:
@@ -283,7 +280,9 @@ while continue_condition:
         novo_q = np.array([1*(x[p].X>.5) for p in range(nproc)])
         if next((True for i in q[m] if np.array_equal(i, novo_q)), False):
             print("coluna já existe")
+            mach_mdl[m]._skipped = True
             continue
+        mach_mdl[m]._skipped = False
 
         _util = (R*novo_q.reshape(nproc,1)).sum(axis=0) 
         _obj1= _util - C_bar[m]
@@ -297,7 +296,8 @@ while continue_condition:
 
         _obj5 = MU[assign,m]
 
-        _v = sum([pi[p]*novo_q[p] for p in range(nproc) if p not in mach_assign[m]])
+        _v1 = sum([pi[p]*novo_q[p] for p in range(nproc) if p not in mach_assign[m]])
+        _v2 = sum([pi[p]*novo_q[p] for p in range(nproc)])
         _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (WPMC*_obj3).sum() + (WMMC*_obj5).sum()
 
         q[m].append(novo_q)
@@ -309,27 +309,30 @@ while continue_condition:
         col.addTerms([1], [m_assign[m]])
 
         print("  obj calculado %12d"%_obj)
-        print( _obj1)
-        print( _obj2)
-        print( _obj3)
-        print(_obj5)
+        print("  obj1          %12d"%(Wlc*_obj1).sum())
+        print("  obj2          %12d"%(Wbal*_obj2).sum())
+        print("  obj3          %12d"%(WPMC*_obj3).sum())
+        print("  obj5          %12d"%(WMMC*_obj5).sum())
         print("  obj obtido       %12.2f"% (obj1.X + obj2.X + obj3.X + obj5.X))
-        print("                   %12.2f"% obj1.X)
-        print("                   %12.2f"% obj2.X)
-        print("                   %12.2f"% obj3.X)
-        print("                   %12.2f"% obj5.X)
-        print("  pi               %12.2f"% _v)
+        print("  obj1             %12.2f"% obj1.X)
+        print("  obj2             %12.2f"% obj2.X)
+        print("  obj3             %12.2f"% obj3.X)
+        print("  obj5             %12.2f"% obj5.X)
+        print("  v1               %12.2f"% _v1)
+        print("  v2               %12.2f"% _v2)
         print("  alpha            %12.2f"% alpha)
         print("  delta:           %12.2f" % (_obj - (obj1.X + obj2.X + obj3.X + obj5.X)))
         lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd[m])), column=col))
         last_var=lbd[m][-1]
         # algo como : col.rc  <-- custo reduzido da coluna
         # col.rc == Obj(m)
-    
-    continue_condition = all([mach_mdl[m]._test < - epslon for m in range(nmach)])
+
+    print([mach_mdl[m]._test for m in range(nmach)])
+
+    continue_condition = all([mach_mdl[m]._test < - epslon for m in range(nmach)]) 
     k+=1
 
-    if k>=2:
+    if all([mach_mdl[m]._skipped for m in range(nmach)]):
         continue_condition = False
 
 
