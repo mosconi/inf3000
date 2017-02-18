@@ -216,13 +216,14 @@ while continue_condition:
     relax_mdl.Params.OutputFlag=0 # não imprime saída
     relax_mdl.optimize()
 
-    rc = [(v.VarName, v.RC) for v in relax_mdl.getVars()]
-    print("  RC", rc)
+#    rc = [(v.VarName, v.RC) for v in relax_mdl.getVars()]
+#    print("  RC", rc)
     pi = [relax_mdl.getConstrByName("p_alloc[%d]" % p ).Pi for p in range(nproc)]
 
     #print(pi[0])
 
     for m in range(nmach):
+        print("")
         print("maquina %d, round %d" % (m,k))
         
         alpha = relax_mdl.getConstrByName("m_assign[%d]"%m).Pi
@@ -244,6 +245,7 @@ while continue_condition:
         obj2 = mach_mdl[m].addVar(lb=0,name="obj2",vtype=GRB.INTEGER,obj=1)
         obj3 = mach_mdl[m].addVar(lb=0,name="obj3",vtype=GRB.INTEGER,obj=1)
         obj5 = mach_mdl[m].addVar(lb=0,name="obj5",vtype=GRB.INTEGER,obj=1)
+        pixp = mach_mdl[m].addVar(lb=0,name="pixp",vtype=GRB.INTEGER,obj=1)
 
         mach_mdl[m].update()
 
@@ -261,10 +263,9 @@ while continue_condition:
         mach_mdl[m].addConstr(obj2 == quicksum(Wbal[r1,r2]*b[r1,r2] for r1 in range(nres) for r2 in range(nres)) )
         mach_mdl[m].addConstr(obj3 == quicksum(WPMC*RHO[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         mach_mdl[m].addConstr(obj5 == quicksum(WMMC*MU[assign[p],m]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
-        
-        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5
-                                 - quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]) 
-                                 + quicksum((WPMC*RHO[p])*(1-x[p]) for p in [p for p in range(nproc) if p in mach_assign[m]])
+        mach_mdl[m].addConstr(pixp == quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]) )
+        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5 - pixp
+                                 #+ quicksum((WPMC*RHO[p])*(1-x[p]) for p in [p for p in range(nproc) if p in mach_assign[m]])
         )
         mach_mdl[m].Params.OutputFlag=0
         mach_mdl[m].optimize()
@@ -292,13 +293,14 @@ while continue_condition:
         _obj2=np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(nres)],dtype=np.int32)
         _obj2[_obj2<0] = 0
     
-        _obj3 = RHO*novo_q
+        _obj3 = WPMC*RHO*novo_q
+        _obj3[[p for p in range(nproc) if p in mach_assign[m]]]=0
 
-        _obj5 = MU[assign,m]
+        _obj5 = MU[assign,m]*novo_q
 
         _v1 = sum([pi[p]*novo_q[p] for p in range(nproc) if p not in mach_assign[m]])
         _v2 = sum([pi[p]*novo_q[p] for p in range(nproc)])
-        _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (WPMC*_obj3).sum() + (WMMC*_obj5).sum()
+        _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (_obj3).sum() + (WMMC*_obj5).sum()
 
         q[m].append(novo_q)
         col = Column()
@@ -308,20 +310,65 @@ while continue_condition:
         
         col.addTerms([1], [m_assign[m]])
 
-        print("  obj calculado %12d"%_obj)
-        print("  obj1          %12d"%(Wlc*_obj1).sum())
-        print("  obj2          %12d"%(Wbal*_obj2).sum())
-        print("  obj3          %12d"%(WPMC*_obj3).sum())
-        print("  obj5          %12d"%(WMMC*_obj5).sum())
-        print("  obj obtido       %12.2f"% (obj1.X + obj2.X + obj3.X + obj5.X))
-        print("  obj1             %12.2f"% obj1.X)
-        print("  obj2             %12.2f"% obj2.X)
-        print("  obj3             %12.2f"% obj3.X)
-        print("  obj5             %12.2f"% obj5.X)
-        print("  v1               %12.2f"% _v1)
-        print("  v2               %12.2f"% _v2)
-        print("  alpha            %12.2f"% alpha)
-        print("  delta:           %12.2f" % (_obj - (obj1.X + obj2.X + obj3.X + obj5.X)))
+        print("  obj calculado        %+15d"%_obj)
+        print("  obj roadef calculado %+15d"%_obj)
+#        print("  obj1          %15d"%(Wlc*_obj1).sum())
+#        print("  obj2          %15d"%(Wbal*_obj2).sum())
+#        print("  obj3          %15d"%(WPMC*_obj3).sum())
+#        print("  obj5          %15d"%(WMMC*_obj5).sum())
+        print("  v1(pi*xp not in)        %+15.2f"% _v1)
+#        print("  v2(pi*xp in)            %15.2f"% _v2)
+        print("  (calc-v1)               %+15.2f"% (_obj - _v1))
+#        print("  (calc-v2)               %15.2f"% (_obj - _v2))
+#        print("  _util")
+#        print(_util)
+#        print("")
+        print("  obj (grb)               %+15.2f"% mach_mdl[m].ObjVal) 
+        print("  obj (grb-roadef)        %+15.2f"% (obj1.X + obj2.X + obj3.X + obj5.X))
+#        print("  obj1             %15.2f"% obj1.X)
+#        print("  obj2             %15.2f"% obj2.X)
+#        print("  obj3             %15.2f"% obj3.X)
+#        print("  obj5             %15.2f"% obj5.X)
+#        print("  pixp             %15.2f"% pixp.X)
+#        print("  xp               ", [mach_mdl[m]])
+#        print("")
+#        print("  alpha            %15.2f"% alpha)
+        print("  delta:                  %+15.2f" % (_obj - (obj1.X + obj2.X + obj3.X + obj5.X)))
+#        print("")
+#        print("  _util")
+#        print(_util)
+#        print("  GRB _util")
+#        print(np.array([ u[r].X  for r in range(nres)]))
+
+#        print("")
+#        print("  _d")
+#        print(_obj1)
+#        print("  GRB _d")
+#        print(np.array([ d[r].X  for r in range(nres)]))
+
+#        print("")
+
+
+ #       print(" q")
+ #       print(novo_q)
+ #       print("  GRB q")
+ #       print(np.array([int(x[p].X)  for p in range(nproc)], dtype=np.int32))
+
+ #       print("")
+
+ #       print(" obj3")
+ #       print(_obj3*1.0)
+ #       print("  GRB obj3")
+ #       print(np.array([WPMC*RHO[p]*x[p].X  for p in range(nproc)]))
+
+ #       print("")
+
+ #       print(" obj5")
+ #       print(_obj5)
+ #       print("  GRB obj5")
+ #       print(np.array([ WMMC*MU[assign[p],m]*x[p].X  for p in range(nproc)]))
+
+
         lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd[m])), column=col))
         last_var=lbd[m][-1]
         # algo como : col.rc  <-- custo reduzido da coluna
