@@ -15,7 +15,7 @@ name="roadef"
 outputfile=None
 savemodel=False
 verbose=True
-tex=True
+tex=False
 
 try:
     opts, args = getopt.getopt(sys.argv[1:],"tqsn:m:a:o:h",["tex","quiet","save","name=","model=","assign=","output=","help"])

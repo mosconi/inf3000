@@ -179,9 +179,11 @@ master_mdl.ModelSense=GRB.MINIMIZE
 lbd=[[] for m in range(nmach)]
 q=[[] for m in range(nmach)]
 
+print(" alloc inicial de" ,end =' ', flush=True)
 for m in range(nmach):
     
     # Calculando custo da alocação inicial
+    print("%d" %m, end=' ', flush=True)
     q[m].append(np.array([assign[p]==m for p in range(nproc)],dtype=np.int32))
     _util = (R*q[m][0].reshape(nproc,1)).sum(axis=0) 
     _obj1= _util - C_bar[m]
@@ -195,20 +197,53 @@ for m in range(nmach):
 
     lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
 
-    
+    # para cada máquina, criará uma nova alocação, "invertendo" cada processo
+    for p in range(nproc):
+        #print(" mach %d proc %d" %(m,p))
+        _q = np.array([assign[p]==m for p in range(nproc)])
+        _q[p] = not _q[p]
+        _q = _q.astype(int)
+        q[m].append(_q)
+        _util = (R*q[m][-1].reshape(nproc,1)).sum(axis=0) 
+        _obj1= _util - C_bar[m]
+        _obj1[_obj1<0]=0
+        
+        _avail = C[m] - _util
+        _obj2=np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(nres)],dtype=np.int32)
+        _obj2[_obj2<0] = 0
+
+        _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (WPMC*RHO[p] + WMMC*MU[assign[p],m])*_q[p]
+
+        lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[%d]"% (m, p+1)))
+        
+print()
+print(" master update")
 master_mdl.update()
+print(" master constraints")
 
 # todo processo deve ser alocado
-p_alloc=master_mdl.addConstrs(
-    (quicksum(q[m][_a][p]*lbd[m][_a] for m in range(nmach) for _a in range(len(lbd[m]))) == 1 for p in range(nproc)), name="p_alloc")
+p_alloc={}
+print(" master constraint proc alloc",end=' ', flush=True)
+for p in range(nproc):
+    print("%d"%p, end=' ', flush=True)
+    p_alloc[p] = master_mdl.addConstr(
+        quicksum(q[m][_a][p]*lbd[m][_a] for m in range(nmach) for _a in range(len(lbd[m]))) == 1 , name="p_alloc[%d]"%p)
 
 # cada máquina somente pode possuir uma alocação
-m_assign = master_mdl.addConstrs((quicksum(lbd[m][_a] for _a in range(len(lbd[m])))==1 for m in range(nmach)),name="m_assign")
+m_assign = {}
+print()
+print(" master constraint mach alloc",end=' ', flush=True)
+for m in range(nmach):
+    print("%d"%m,end=' ', flush=True)
+    m_assign[m] = master_mdl.addConstr(
+        quicksum(lbd[m][_a] for _a in range(len(lbd[m])))==1 ,name="m_assign[%d]"%m)
 
 mach_mdl={}
 last_var=None
 continue_condition = True
-k = 0 
+k = 0
+print()
+
 while continue_condition:
     
     master_mdl.update()     # atualiza antes de relaxar
@@ -225,7 +260,6 @@ while continue_condition:
     #print(pi[0])
 
     _skipped = [False for m in range(nmach)]
-
     for m in range(nmach):
         print("         round %5d   maquina %5d" % (k,m) , end=' ', flush=True)
         
@@ -266,9 +300,8 @@ while continue_condition:
         mach_mdl[m].addConstr(obj3 == quicksum(WPMC*RHO[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         mach_mdl[m].addConstr(obj5 == quicksum(WMMC*MU[assign[p],m]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
         mach_mdl[m].addConstr(pixp == quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]) )
-        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5 - pixp
-                                 #+ quicksum((WPMC*RHO[p])*(1-x[p]) for p in [p for p in range(nproc) if p in mach_assign[m]])
-        )
+        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5 - pixp)
+
         mach_mdl[m].Params.OutputFlag=0
         mach_mdl[m].optimize()
         #print("maq %d: obj: %0.2f alpha: %0.2f --> %0.2f" % (m,mach_mdl[m].ObjVal,alpha ,mach_mdl[m].ObjVal - alpha))
@@ -276,7 +309,7 @@ while continue_condition:
             #if verbose: print("resource obj %d: %d" % (r, d[r].X))
 
         print(" %+20.3f - %+20.3f = %+20.3f" % (mach_mdl[m].ObjVal, alpha[m], mach_mdl[m].ObjVal - alpha[m]  ))
-            
+
         novo_q = np.array([1*(x[p].X>.5) for p in range(nproc)])
 
         _skipped[m] = False
@@ -375,7 +408,7 @@ while continue_condition:
                     print("")
                     
                     print("   deltas:")
-                    print(np.array([ d[r].X  for r in range(nres)]))
+                    print(np.array([ d[r].X  for r in range(nres)]) - _obj1)
                     print("")
                     
                 if abs((Wbal*_obj2).sum() -  obj2.X) > epslon:
@@ -412,18 +445,14 @@ while continue_condition:
            
         lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd[m])), column=col))
         last_var=lbd[m][-1]
-        # algo como : col.rc  <-- custo reduzido da coluna
-        # col.rc == Obj(m)
 
 
-    
     if any([mach_mdl[m].ObjVal - alpha[m] > - epslon for m in range(nmach)]):
         print("")
         print("   objVal - alpha > - epslon")
         print("")
 
         continue_condition = False
-
     k+=1
 
     if all([_skipped[m] for m in range(nmach)]):
@@ -437,6 +466,7 @@ while continue_condition:
 master_mdl.optimize()
 
 for m in range(nmach):
-    print("máquina %d allocs: %d"% (m, len(q[m])))
+    print("máquina %d allocs: %d/%d"% (m, len(q[m]), len(lbd[m])))
+
     print(np.array([[q[m][_a][p] for p in range(nproc)]for _a in range(len(q[m]))],dtype=np.int32))
     print(np.array([lbd[m][_a].X for _a in range(len(lbd[m]))]))
