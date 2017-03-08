@@ -7,7 +7,7 @@ from time import time
 from gurobipy import *
 
 rows, columns = os.popen('stty size', 'r').read().split()
-np.set_printoptions(linewidth=int(columns)-2)
+np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+20.3f" % x,'int': lambda x: "%+20d" % x, })
 
 def usage():
     print("%s [-n name] [-o outputfile ] [-s] [-q] -m modelfile -a assignfile\n" % sys.argv[0])
@@ -160,7 +160,7 @@ T=np.array(T)
 
 if verbose: print(">> problem size")
 if verbose: print(">>> resources ",nres)
-if verbose: print(">>> transisent ",T.sum())
+if verbose: print(">>> transient ",T.sum())
 if verbose: print(">>> machines ",nmach)
 if verbose: print(">>> process ",nproc)
 if verbose: print(">>> services ",nserv)
@@ -179,9 +179,11 @@ master_mdl.ModelSense=GRB.MINIMIZE
 lbd=[[] for m in range(nmach)]
 q=[[] for m in range(nmach)]
 
+print(" alloc inicial de" ,end =' ', flush=True)
 for m in range(nmach):
     
     # Calculando custo da alocação inicial
+    print("%d" %m, end=' ', flush=True)
     q[m].append(np.array([assign[p]==m for p in range(nproc)],dtype=np.int32))
     _util = (R*q[m][0].reshape(nproc,1)).sum(axis=0) 
     _obj1= _util - C_bar[m]
@@ -195,34 +197,48 @@ for m in range(nmach):
 
     lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
 
-    
+        
+print("")
+print(" master update")
 master_mdl.update()
+print(" master constraints")
 
 # todo processo deve ser alocado
-p_alloc=master_mdl.addConstrs(
-    (quicksum(q[m][_a][p]*lbd[m][_a] for m in range(nmach) for _a in range(len(lbd[m]))) == 1 for p in range(nproc)), name="p_alloc")
+p_alloc={}
+print(" master constraint proc alloc",end=' ', flush=True)
+for p in range(nproc):
+    print("%d"%p, end=' ', flush=True)
+    p_alloc[p] = master_mdl.addConstr(
+        quicksum(q[m][_a][p]*lbd[m][_a] for m in range(nmach) for _a in range(len(lbd[m]))) == 1 , name="p_alloc[%d]"%p)
 
 # cada máquina somente pode possuir uma alocação
-m_assign = master_mdl.addConstrs((quicksum(lbd[m][_a] for _a in range(len(lbd[m])))==1 for m in range(nmach)),name="m_assign")
+m_assign = {}
+print()
+print(" master constraint mach alloc",end=' ', flush=True)
+for m in range(nmach):
+    print("%d"%m,end=' ', flush=True)
+    m_assign[m] = master_mdl.addConstr(
+        quicksum(lbd[m][_a] for _a in range(len(lbd[m])))==1 ,name="m_assign[%d]"%m)
 
 mach_mdl={}
 last_var=None
 continue_condition = True
-k = 0 
+k = 0
+print()
+
+
 while continue_condition:
     
     master_mdl.update()     # atualiza antes de relaxar
     print("   relax round %5d" % k )
     relax_mdl = master_mdl.relax()
     relax_mdl.Params.OutputFlag=0 # não imprime saída
+#    relax_mdl.write("relax_%d.mps"%k)
     relax_mdl.optimize()
-
-#    rc = [(v.VarName, v.RC) for v in relax_mdl.getVars()]
-#    print("  RC", rc)
-    pi = [relax_mdl.getConstrByName("p_alloc[%d]" % p ).Pi for p in range(nproc)]
-    alpha = [relax_mdl.getConstrByName("m_assign[%d]"%m).Pi for m in range(nmach)]
-
-    #print(pi[0])
+    
+#    _all_pi = np.array([c.Pi for c in relax_mdl.getConstrs()])
+    pi = np.array([relax_mdl.getConstrByName("p_alloc[%d]" % p ).Pi for p in range(nproc)])
+    alpha = np.array([relax_mdl.getConstrByName("m_assign[%d]" % m).Pi for m in range(nmach)])
 
     _skipped = [False for m in range(nmach)]
 
@@ -238,7 +254,7 @@ while continue_condition:
             x[p].start=0
             
         u=mach_mdl[m].addVars(nres,lb=0,ub=C[m],name="u",vtype=GRB.INTEGER)
-        d=mach_mdl[m].addVars(nres,lb=0,ub=C[m],name="d",vtype=GRB.INTEGER)
+        d=mach_mdl[m].addVars(nres,lb=0,ub=C[m]-C_bar[m],name="d",vtype=GRB.INTEGER)
         a=mach_mdl[m].addVars(nres,lb=0,ub=C[m],name="a",vtype=GRB.INTEGER)
 
         b=mach_mdl[m].addVars(nres,nres,lb=0,name="b",vtype=GRB.INTEGER)
@@ -261,39 +277,86 @@ while continue_condition:
         mach_mdl[m].addConstrs((d[r] >= u[r] - C_bar[m,r] for r in range(nres)),name="overload_%d" % m)
         mach_mdl[m].update()
 
-        mach_mdl[m].addConstr(obj1 == quicksum(Wlc[r]*d[r] for r in range(nres)))
-        mach_mdl[m].addConstr(obj2 == quicksum(Wbal[r1,r2]*b[r1,r2] for r1 in range(nres) for r2 in range(nres)) )
-        mach_mdl[m].addConstr(obj3 == quicksum(WPMC*RHO[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
-        mach_mdl[m].addConstr(obj5 == quicksum(WMMC*MU[assign[p],m]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]))
-        mach_mdl[m].addConstr(pixp == quicksum((pi[p])*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]) )
-        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5 - pixp
-                                 #+ quicksum((WPMC*RHO[p])*(1-x[p]) for p in [p for p in range(nproc) if p in mach_assign[m]])
-        )
-        mach_mdl[m].Params.OutputFlag=0
-        mach_mdl[m].optimize()
-        #print("maq %d: obj: %0.2f alpha: %0.2f --> %0.2f" % (m,mach_mdl[m].ObjVal,alpha ,mach_mdl[m].ObjVal - alpha))
-        #for r in range(nres):
-            #if verbose: print("resource obj %d: %d" % (r, d[r].X))
+        mach_mdl[m].addConstr(obj1 == quicksum(Wlc[r]*d[r] for r in range(nres)),name="obj1_%d" % m)
+        mach_mdl[m].addConstr(obj2 == quicksum(Wbal[r1,r2]*b[r1,r2] for r1 in range(nres) for r2 in range(nres)),name="obj2_%d" % m )
+        mach_mdl[m].addConstr(obj3 == quicksum(WPMC*RHO[p]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]),name="obj3_%d" % m)
+        mach_mdl[m].addConstr(obj5 == quicksum(WMMC*MU[assign[p],m]*x[p] for p in [p for p in range(nproc) if p not in mach_assign[m]]),name="obj5_%d" % m)
+        mach_mdl[m].addConstr(pixp == quicksum((pi[p])*x[p] for p in [p for p in range(nproc)]),name="pixp" )
+        mach_mdl[m].setObjective(obj1 + obj2 + obj3 + obj5 - pixp -alpha[m])
 
-        print(" %+20.3f - %+20.3f = %+20.3f" % (mach_mdl[m].ObjVal, alpha[m], mach_mdl[m].ObjVal - alpha[m]  ))
+        mach_mdl[m].Params.OutputFlag=0
+#        mach_mdl[m].write("mach_%d_%d.lp" % (m,k))
+        mach_mdl[m].optimize()
+
+        print(" %+20.3f - %+20.3f - %+20.3f = %+20.3f " % (obj1.X + obj2.X + obj3.X + obj5.X, pixp.X , alpha[m], mach_mdl[m].ObjVal  ), flush = True)
+
+
+        if mach_mdl[m].ObjVal > -epslon:
+            print("coluna não otima")
+            print("")
+#            input("Press Enter to continue...")
+            _skipped[m] = True
+            continue
             
-        novo_q = np.array([1*(x[p].X>.5) for p in range(nproc)])
+
+        novo_q = np.array([1*(x[p].X>.5) for p in range(nproc)], dtype=np.int)
 
         _skipped[m] = False
 
-        if next((True for i in q[m] if np.array_equal(i, novo_q)), False):
-            print("coluna já existe")
-            print(novo_q)
-            _skipped[m] = True
-            continue
+        for i in range(len(q[m])):
+            if np.array_equal(q[m][i],novo_q):
+                print("coluna já existe")
+               
+                v = relax_mdl.getVarByName("lbd_%d[%d]" % (m,i))
+                print(v)
+                
+#                print()
+#                print(" q obtido")
+#                print(novo_q)
+#                
+#                coefs = np.array([relax_mdl.getCoeff(c, v) for c in relax_mdl.getConstrs()])
+#
+#                print("coefs:")
+#                print(coefs)
+#
+#                print("delta:")
+#                print(novo_q - coefs[:nproc])
+#
+#                print()
+                print("RC (master) : %+20.3f" % (v.RC))
+                print("RC (calc)   : %+20.3f" % (mach_mdl[m].ObjVal - alpha[m]))
+                print("delta       : %+20.3f" % (v.RC - (mach_mdl[m].ObjVal - alpha[m])))
+#                print("obj (grb)   : %+20.3f" % (obj1.X + obj2.X + obj3.X + obj5.X))
+#                print("obj (master): %+20.3f" % (v.Obj))
+
+#                print()
+#                print("  pi" )
+#                print(pi)
+#                print("  all pi")
+#                print(_all_pi)
+
+#                print("  all pi * coefs: %+20.3f" % ((_all_pi*coefs).sum()))
+#                print(_all_pi*coefs)
+
+#                _pixp = np.array([pi[p]*x[p].X for p in range(nproc)])
+
+#                print("  pi*xp(grb):     %+20.3f" % _pixp.sum())
+#                print(_pixp)
+#                print("delta pi*xp : %+20.3f" % (_pixp.sum() - (_all_pi*coefs).sum()))
+#                print(_pixp - (_all_pi*coefs)[:nproc])
+                _skipped[m] = True
+                #sys.exit(0)
+                print("")
+#                input("Press Enter to continue...")
+                continue
         
 
-        _util = (R*novo_q.reshape(nproc,1)).sum(axis=0) 
-        _obj1= _util - C_bar[m]
+        _util = (R*novo_q.reshape(nproc,1)).sum(axis=0)
+        _obj1 = _util - C_bar[m]
         _obj1[_obj1<0]=0
         
         _avail = C[m] - _util
-        _obj2=np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(nres)],dtype=np.int32)
+        _obj2=np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(nres)])
         _obj2[_obj2<0] = 0
     
         _obj3 = WPMC*RHO*novo_q
@@ -301,29 +364,28 @@ while continue_condition:
 
         _obj5 = MU[assign,m]*novo_q
 
-        _v1 = sum([pi[p]*novo_q[p] for p in range(nproc) if p not in mach_assign[m]])
-        _v2 = sum([pi[p]*novo_q[p] for p in range(nproc)])
+        _v1 = sum([pi[p]*novo_q[p] for p in range(nproc)])
         _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (_obj3).sum() + (WMMC*_obj5).sum()
 
         q[m].append(novo_q)
         col = Column()
    
-        col.addTerms(q[m][-1],
+        col.addTerms(novo_q,
                      [p_alloc[p] for p in range(nproc)])
         
         col.addTerms([1], [m_assign[m]])
 
-        if abs(mach_mdl[m].ObjVal - (_obj - _v1)) > epslon:
+        if abs(mach_mdl[m].ObjVal - (_obj - _v1 - alpha[m])) > epslon:
             print(">>>> cal mismatch!")
             print("  delta:                  %+15.2f" % (mach_mdl[m].ObjVal - (_obj - _v1)))
             print("  epslon:                 %+15.2f" % epslon )
             print("")
 
-            print("  obj calculado        %+15d"% (_obj - _v1))
+            print("  obj calculado           %+15.2f"% (_obj - _v1))
             print("  obj (grb)               %+15.2f"% mach_mdl[m].ObjVal)
                         
             print("")
-            print("  obj roadef calculado %+15d"%_obj)
+            print("  obj roadef calculado    %+15.2f"%_obj)
             print("  obj (grb-roadef)        %+15.2f"% (obj1.X + obj2.X + obj3.X + obj5.X))
             print("  delta:                  %+15.2f" % ((obj1.X + obj2.X + obj3.X + obj5.X) - _obj))
             print("")
@@ -343,13 +405,13 @@ while continue_condition:
             print("  delta:                  %+15.2f" % ((obj3.X - (WPMC*_obj3).sum() )))
             print("")
 
-            print("  obj5                 %15d"%(WMMC*_obj5).sum())
-            print("  obj5 (grb)              %15.2f"% obj5.X)
+            print("  obj5                %+15d"%(WMMC*_obj5).sum())
+            print("  obj5 (grb)              %+15.2f"% obj5.X)
             print("  delta:                  %+15.2f" % ((obj5.X - (WMMC*_obj5).sum() )))
             print("")
 
-            print("  pixp  (grb)             %+15.2f"% pixp.X )
             print("  pi*xp                   %+15.2f"% _v1)
+            print("  pi*xp  (grb)            %+15.2f"% pixp.X )
             print("  delta:                  %+15.2f" % (pixp.X - _v1)) 
             print("")
 
@@ -361,7 +423,7 @@ while continue_condition:
                     print("  _util")
                     print(_util)
                     print("  GRB _util")
-                    print(np.array([ u[r].X  for r in range(nres)]))
+                    print(np.array([ u[r].X  for r in range(nres)], dtype = np.int))
                     print("")
                     
                     print("  C_bar")
@@ -371,11 +433,11 @@ while continue_condition:
                     print("  _d")
                     print(_obj1)
                     print("  GRB _d")
-                    print(np.array([ d[r].X  for r in range(nres)]))
+                    print(np.array([ d[r].X  for r in range(nres)], dtype = np.int))
                     print("")
                     
                     print("   deltas:")
-                    print(np.array([ d[r].X  for r in range(nres)]))
+                    print(np.array([ d[r].X  for r in range(nres)], dtype = np.int) - _obj1)
                     print("")
                     
                 if abs((Wbal*_obj2).sum() -  obj2.X) > epslon:
@@ -400,30 +462,33 @@ while continue_condition:
                     print("")
 
                 if abs(_v1 - pixp.X) > epslon:
-                    print(np.array([pi[p]*x[p].X for p in [p for p in range(nproc) if p not in mach_assign[m]]]))
-                    print(np.array([pi[p]*novo_q[p] for p in range(nproc) if p not in mach_assign[m]]))
-                                                    
+                    print(" pi*xp")
+                    _pixp = np.array([pi[p]*novo_q[p] for p in range(nproc) if p not in mach_assign[m]])
+                    _grb_pixp = np.array([pi[p]*x[p].X for p in [p for p in range(nproc) if p not in mach_assign[m]]])
+                    print(_pixp)
+
+                    print(" GRB pi*xp")
+                    print(_grb_pixp)
+                    print(" delta")
+                    print(_pixp-_grb_pixp)
 
                 print("")
-                input("Press Enter to continue...")
+#                input("Press Enter to continue...")
 
 
            
            
-        lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.INTEGER,name="lbd_%d[%d]"%(m,len(lbd[m])), column=col))
+        lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[%d]"%(m,len(lbd[m])), column=col))
         last_var=lbd[m][-1]
-        # algo como : col.rc  <-- custo reduzido da coluna
-        # col.rc == Obj(m)
 
+            
 
-    
-    if any([mach_mdl[m].ObjVal - alpha[m] > - epslon for m in range(nmach)]):
-        print("")
-        print("   objVal - alpha > - epslon")
-        print("")
-
-        continue_condition = False
-
+#    if all([mach_mdl[m].ObjVal - alpha[m] > - epslon for m in range(nmach)]):
+#        print("")
+#        print("   objVal - alpha > - epslon")
+#        print("")
+#
+#        continue_condition = False
     k+=1
 
     if all([_skipped[m] for m in range(nmach)]):
@@ -433,10 +498,24 @@ while continue_condition:
         continue_condition = False
 
 
-
+master_mdl.Params.OutputFlag=0
 master_mdl.optimize()
 
+sol = np.zeros(nproc,dtype=np.int32)
+print(sol)
 for m in range(nmach):
-    print("máquina %d allocs: %d"% (m, len(q[m])))
-    print(np.array([[q[m][_a][p] for p in range(nproc)]for _a in range(len(q[m]))],dtype=np.int32))
+    print("máquina %d allocs: %d/%d"% (m, len(q[m]), len(lbd[m])))
+
+    print(np.array([[q[m][_a][p] for p in range(nproc)] for _a in range(len(q[m]))],dtype=np.int32))
     print(np.array([lbd[m][_a].X for _a in range(len(lbd[m]))]))
+
+    _lbd = [_a for _a in range(len(lbd[m])) if lbd[m][_a].X > .5][0]
+    print(_lbd)
+
+    _q = q[m][_lbd]
+    print(_q)
+    sol[_q==1] = m
+    print(sol)
+
+print(sol)
+    
