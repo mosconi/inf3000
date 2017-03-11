@@ -21,6 +21,26 @@ verbose=True
 tex=True
 epslon = 10**-1
 
+def exist_column(s,c):
+    for i in range(len(s)):
+        if np.array_equal(s[i],c):
+            return True
+    return False
+
+def obj_column_wo_move(q):
+    _util          = (R*q.reshape(nproc,1)).sum(axis=0)
+    
+    _obj1          = _util - C_bar[m]
+    _obj1[_obj1<0] = 0
+
+    _avail         = C[m] - _util
+    _obj2          = np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres) ] for r1 in range(nres)],
+                              dtype=np.int32)
+    _obj2[_obj2<0] = 0
+
+    _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum()
+
+    return _obj
 
 try:
     opts, args = getopt.getopt(sys.argv[1:],"tqsn:m:a:o:h",["tex","quiet","save","name=","model=","assign=","output=","help"])
@@ -242,6 +262,10 @@ while continue_condition:
 
     _skipped = [False for m in range(nmach)]
 
+    _q_obj = [[] for m in range(nmach)]
+    _q=[[] for m in range(nmach)]
+
+    
     for m in range(nmach):
         print("         round %5d   maquina %5d" % (k,m) , end=' ', flush=True)
         
@@ -297,52 +321,25 @@ while continue_condition:
 
         _skipped[m] = False
 
-        for i in range(len(q[m])):
-            if np.array_equal(q[m][i],novo_q):
-                print("coluna já existe")
+        if exist_column(_q[m], novo_q):
+            print("coluna já computada")
+            _skipped[m]=True
+            continue
+
+        if exist_column(q[m],novo_q):
+            print("coluna já existe")
                
-                v = relax_mdl.getVarByName("lbd_%d[%d]" % (m,i))
-                print(v)
+            v = relax_mdl.getVarByName("lbd_%d[%d]" % (m,i))
+            print(v)
                 
-#                print()
-#                print(" q obtido")
-#                print(novo_q)
-#                
-#                coefs = np.array([relax_mdl.getCoeff(c, v) for c in relax_mdl.getConstrs()])
-#
-#                print("coefs:")
-#                print(coefs)
-#
-#                print("delta:")
-#                print(novo_q - coefs[:nproc])
-#
-#                print()
-                print("RC (master) : %+20.3f" % (v.RC))
-                print("RC (calc)   : %+20.3f" % (mach_mdl[m].ObjVal - alpha[m]))
-                print("delta       : %+20.3f" % (v.RC - (mach_mdl[m].ObjVal - alpha[m])))
-#                print("obj (grb)   : %+20.3f" % (obj1.X + obj2.X + obj3.X + obj5.X))
-#                print("obj (master): %+20.3f" % (v.Obj))
-
-#                print()
-#                print("  pi" )
-#                print(pi)
-#                print("  all pi")
-#                print(_all_pi)
-
-#                print("  all pi * coefs: %+20.3f" % ((_all_pi*coefs).sum()))
-#                print(_all_pi*coefs)
-
-#                _pixp = np.array([pi[p]*x[p].X for p in range(nproc)])
-
-#                print("  pi*xp(grb):     %+20.3f" % _pixp.sum())
-#                print(_pixp)
-#                print("delta pi*xp : %+20.3f" % (_pixp.sum() - (_all_pi*coefs).sum()))
-#                print(_pixp - (_all_pi*coefs)[:nproc])
-                _skipped[m] = True
-                #sys.exit(0)
-                print("")
-#                input("Press Enter to continue...")
-                continue
+            print("RC (master) : %+20.3f" % (v.RC))
+            print("RC (calc)   : %+20.3f" % (mach_mdl[m].ObjVal - alpha[m]))
+            print("delta       : %+20.3f" % (v.RC - (mach_mdl[m].ObjVal - alpha[m])))
+            _skipped[m] = True
+            #sys.exit(0)
+            print("")
+            #                input("Press Enter to continue...")
+            continue
 
 
         if mach_mdl[m].ObjVal > -epslon:
@@ -369,13 +366,37 @@ while continue_condition:
         _v1 = sum([pi[p]*novo_q[p] for p in range(nproc)])
         _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (_obj3).sum() + (WMMC*_obj5).sum()
 
-        q[m].append(novo_q)
-        col = Column()
-   
-        col.addTerms(novo_q,
-                     [p_alloc[p] for p in range(nproc)])
-        
-        col.addTerms([1], [m_assign[m]])
+        _q[m].append(novo_q)
+
+        _q_obj[m].append(int(obj1.X + obj2.X + obj3.X + obj5.X))
+
+        # determina se a nova coluna ganhou processos:
+        _p = [p for p in range(nproc) if p not in mach_assign[m] and novo_q[p]==1]
+        if len(_p)>0:
+            print(_p)
+
+            _from = [[] for _m in range(nmach)]
+            for p in _p:
+                for _m in [_m for _m in range(nmach) if not _m == m]:
+                    if p in mach_assign[_m]:
+                        _from[_m].append(p)
+            # descobir as maquinas que perderam processos
+
+            for _m in range(nmach):
+                if len(_from[_m]) == 0: continue
+                # cria novas colunas para outras maquinas
+                _outro_q= np.array([assign[p]==_m for p in range(nproc)],
+                                   dtype=np.int)
+                _outro_q[_from[_m]] = 0
+
+                if exist_column(_q[_m],_outro_q): continue
+                if exist_column(q[_m],_outro_q): continue
+                
+                # computa OBJ da outra coluna:
+                _q[_m].append(_outro_q)
+                _q_obj[_m].append(obj_column_wo_move(_outro_q))
+
+
 
         if abs(mach_mdl[m].ObjVal - (_obj - _v1 - alpha[m])) > epslon:
             print(">>>> cal mismatch!")
@@ -479,18 +500,18 @@ while continue_condition:
 
 
            
+        col = Column()
+        
+        col.addTerms(novo_q,
+                     [p_alloc[p] for p in range(nproc)])
+        
+        col.addTerms([1], [m_assign[m]])
            
         lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[%d]"%(m,len(lbd[m])), column=col))
         last_var=lbd[m][-1]
 
             
 
-#    if all([mach_mdl[m].ObjVal - alpha[m] > - epslon for m in range(nmach)]):
-#        print("")
-#        print("   objVal - alpha > - epslon")
-#        print("")
-#
-#        continue_condition = False
     k+=1
 
     if all([_skipped[m] for m in range(nmach)]):
