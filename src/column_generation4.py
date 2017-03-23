@@ -20,9 +20,9 @@ savemodel=False
 verbose=True
 tex=True
 epslon = 10**-1
-xi = 10**-1
-hsz = 5
-slack = 0.2
+xi = 10**3
+hsz = 10
+slack = 0.02
 
 try:
     opts, args = getopt.getopt(sys.argv[1:],"tqsn:m:a:o:h",["tex","quiet","save","name=","model=","assign=","output=","help"])
@@ -253,8 +253,6 @@ while continue_condition:
         pi_lb = hpi.min(axis=0) * (1-slack)
         pi_ub = hpi.max(axis=0) * (1+slack)
 
-
-
         
         for p in range(nproc):
             col_ub = Column()
@@ -296,8 +294,9 @@ while continue_condition:
 
     if verbose: print(alpha)
 
-    hpi[k%hsz] = pi
-    halpha[k%hsz] = alpha
+    if k< hsz:
+        hpi[k%hsz] = pi
+        halpha[k%hsz] = alpha
 
     _skipped = [False for m in range(nmach)]
 
