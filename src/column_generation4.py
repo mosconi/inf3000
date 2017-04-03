@@ -247,11 +247,16 @@ while continue_condition:
     alpha_lb = halpha.min(axis=0) * (1-slack)
     alpha_ub = halpha.max(axis=0) * (1+slack)
 
+    alpha_lb[abs(alpha_lb)<epslon ] = - alpha_ub[abs(alpha_lb)<epslon ]
+    alpha_ub[abs(alpha_ub)<epslon ] = - alpha_lb[abs(alpha_ub)<epslon ]
     
     
     if k >= hsz:
         pi_lb = hpi.min(axis=0) * (1-slack)
         pi_ub = hpi.max(axis=0) * (1+slack)
+
+        pi_lb[abs(pi_lb)<epslon ] = - pi_ub[abs(pi_lb)<epslon ]
+        pi_ub[abs(pi_ub)<epslon ] = - pi_lb[abs(pi_ub)<epslon ]
 
         
         for p in range(nproc):
@@ -572,7 +577,7 @@ for m in range(nmach):
     if verbose: print(_lbd, end='  ')
 
     _q = q[m][_lbd]
-    if verbose: print(_q)
+    if verbose: print()
     sol[_q==1] = m
 #    print(sol)
 
