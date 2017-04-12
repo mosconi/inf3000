@@ -229,6 +229,9 @@ print()
 
 while continue_condition:
     
+    if k == nmach:
+        break
+
     master_mdl.update()     # atualiza antes de relaxar
     print("   relax round %5d" % k )
     relax_mdl = master_mdl.relax()
@@ -390,22 +393,22 @@ while continue_condition:
             print("  delta:                  %+15.2f" % ((obj1.X + obj2.X + obj3.X + obj5.X) - _obj))
             print("")
                   
-            print("  obj1                 %15d"%(Wlc*_obj1).sum())
-            print("  obj1 (grb)              %15.2f"% obj1.X)
+            print("  obj1                 %+15d"%(Wlc*_obj1).sum())
+            print("  obj1 (grb)              %+15.2f"% obj1.X)
             print("  delta:                  %+15.2f" % ((obj1.X - (Wlc*_obj1).sum() )))
             print("")
                   
-            print("  obj2                 %15d"%(Wbal*_obj2).sum())
-            print("  obj2 (grb)              %15.2f"% obj2.X)
+            print("  obj2                 %+15d"%(Wbal*_obj2).sum())
+            print("  obj2 (grb)              %+15.2f"% obj2.X)
             print("  delta:                  %+15.2f" % ((obj2.X - (Wbal*_obj2).sum() )))
             print("")
             
-            print("  obj3                 %15d"%(WPMC*_obj3).sum())
-            print("  obj3 (grb)              %15.2f"% obj3.X)
+            print("  obj3                  %15d"%(WPMC*_obj3).sum())
+            print("  obj3 (grb)              %+15.2f"% obj3.X)
             print("  delta:                  %+15.2f" % ((obj3.X - (WPMC*_obj3).sum() )))
             print("")
 
-            print("  obj5                %+15d"%(WMMC*_obj5).sum())
+            print("  obj5                 %+15d"%(WMMC*_obj5).sum())
             print("  obj5 (grb)              %+15.2f"% obj5.X)
             print("  delta:                  %+15.2f" % ((obj5.X - (WMMC*_obj5).sum() )))
             print("")
@@ -502,20 +505,21 @@ master_mdl.Params.OutputFlag=0
 master_mdl.optimize()
 
 sol = np.zeros(nproc,dtype=np.int32)
-print(sol)
+#print(sol)
 for m in range(nmach):
-    print("máquina %d allocs: %d/%d"% (m, len(q[m]), len(lbd[m])))
+    print("máquina %d allocs: %d/%d best: "% (m, len(q[m]), len(lbd[m])), end='')
 
-    print(np.array([[q[m][_a][p] for p in range(nproc)] for _a in range(len(q[m]))],dtype=np.int32))
-    print(np.array([lbd[m][_a].X for _a in range(len(lbd[m]))]))
+#    print(np.array([[q[m][_a][p] for p in range(nproc)] for _a in range(len(q[m]))],dtype=np.int32))
+#    print(np.array([lbd[m][_a].X for _a in range(len(lbd[m]))]))
 
     _lbd = [_a for _a in range(len(lbd[m])) if lbd[m][_a].X > .5][0]
     print(_lbd)
 
     _q = q[m][_lbd]
-    print(_q)
+#    print(_q)
     sol[_q==1] = m
-    print(sol)
+#    print(sol)
 
+print(np.array(assign,dtype=np.int32))
 print(sol)
     
