@@ -1,29 +1,32 @@
+import numpy as np
 
 class Instance:
-    def __new__(cls, model=None, assign=None):
+    def __new__(cls, model=None, assign=None,inline=False):
         if not model:
             raise ValueError("Missing model")
         if not assign:
             raise ValueError("Missing initial assigment")
         return super(Instance,cls).__new__(cls)
     
-    def __init__ (self,model=None,assign=None):
+    def __init__ (self,model=None,assign=None,inline=False):
 
-
+        self._memo={}
+        
+        self._inline=inline
         self._loadmodel(model)
         self._loadassign(assign)
+
 
     def _loadmodel(self,_modelfile):
 
         self.M=[]
 
-        f = open(_modelfile, "r")
-
-        lines = [list(map(int,l.rstrip('\n').split())) for l in f]
-
-        f.close()
-
-        import numpy as np
+        if self._inline:
+            lines = [list(map(int,l.rstrip('\n').split())) for l in _modelfile.split('\n')]
+        else:
+            f = open(_modelfile, "r")
+            lines = [list(map(int,l.rstrip('\n').split())) for l in f]
+            f.close()
 
         nres = lines.pop(0)[0]
 
@@ -77,6 +80,8 @@ class Instance:
 
         nproc = lines.pop(0)[0]
 
+        self.delta = delta
+        self.sdep = sdep
         self.nproc = nproc
 
         self.S=[]
@@ -112,47 +117,125 @@ class Instance:
 
 
     def _loadassign(self, _assignfile):
-        f = open(_assignfile, "r")
-        line = [list(map(int,l.rstrip('\n').split())) for l in f][0]
-        assign=line[:]
 
+        if self._inline:
+            line = [int(l) for l in _assignfile.split()]
+        else:
+            f = open(_assignfile, "r")
+            line = [list(map(int,l.rstrip('\n').split())) for l in f][0]
+            close(f)
+        self._assign=line[:]
 
+    def assign(self):
+        return self._assign
+        
     def validate(self,solution=None):
 
         if not solution:
-            raise("")
+            raise Exception("")
 
- 
-        import numpy as np
-        moved_proc = [n for n,k in enumerate(zip(self.assign,solution)) if k[0]!=k[1]]
+        if tuple(solution) in self._memo:
+            return True
+        
+        # all proc allocated
+        if len(solution) != self.nproc:
+            raise Exception("all proc allocated")
+            return False
 
-        print(moved_proc)
+        _sol = np.array(solution,dtype=np.int32)
+        moved_proc = np.zeros((self.nmach,self.nproc),dtype=np.int32)
 
-        q=[[] for m in range(self.nmach)]
+        q=np.zeros((self.nmach,self.nproc),dtype=np.int32)
+        q_o=np.zeros((self.nmach,self.nproc),dtype=np.int32)
 
-        q[m].append(np.array([solution[p]==m for p in range(self.nproc)],dtype=np.int32))
-        _util = (R*q[m][0].reshape(self.nproc,1)).sum(axis=0) 
-#        _util_tr =  
-        _obj1= _util - C_bar[m]
+        for m in range(self.nmach):
+            for p in range(self.nproc):
+                q[m][p] = _sol[p] ==m
+                q_o[m][p] = self._assign[p] ==m
+                if self._assign[p] == m and solution[p] != m:
+                    moved_proc[m][p] =1
+
+        #print(moved_proc)
+
+        # capacity constraint + transient usage
+        _util = q.dot(self.R)
+        #print(_util)
+        _util_tr = moved_proc.dot(self.R*self.T)
+        #print(_util_tr)
+        if np.any(_util + _util_tr > self.C):
+            raise Exception("usage/transient")
+
+        
+        # conflict constraint + spread constraint
+        for s in range(len(self.S)):
+            _s = np.array([p in self.S[s] for p in range(self.nproc) ],dtype=np.bool)
+            if np.unique(_sol[_s]).size != len(_sol[_s]):
+                raise Exception("conflict")
+            if len(_sol[_s]) < self.delta[s]:
+                raise Exception("spread")
+
+
+        # dependency
+
+        _n = np.zeros(self.nproc,dtype=np.int32)
+
+        for n in range(len(self.N)):
+            _n[np.array([_sol[p] in self.N[n] for p in range(self.nproc)])] = n
+
+        for _s, _dep in self.sdep.items():
+            for _p1 in self.S[_s]:
+                for _s2 in _dep:
+                    if _n[_p1] not in _n[self.S[_s2]]:
+                        raise Exception("dependency")
+        
+        # memoize...
+        self._memo[tuple(solution)]={'util': _util,
+                                     'moved': moved_proc,
+                                     'orig_assign': q_o,
+                                     'sol': q
+        }
+
+        return True
+        
+
+    def objective(self,solution=None):
+        
+        if not solution:
+            raise Exception("")
+
+        if not self.validate(solution):
+            raise Exception("")
+
+        _util = self._memo[tuple(solution)]['util']
+        q = self._memo[tuple(solution)]['sol']
+        q_o = self._memo[tuple(solution)]['orig_assign']
+        moved = self._memo[tuple(solution)]['moved']
+        
+        _obj1= _util - self.SC
         _obj1[_obj1<0]=0
-        
-        _avail = C[m] - _util
-        _obj2=np.array([[bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(self.nres)],dtype=np.int32)
+
+        _avail = self.C - _util
+
+        _obj2=np.zeros((self.nmach,self.nres,self.nres),dtype=np.int32)
+
+        for m in range(self.nmach):
+            _obj2[m]=np.array([[self.bT[r1,r2]*_avail[m,r1] - _avail[m,r2] for r2 in range(self.nres)] for r1 in range(self.nres)],dtype=np.int32)
         _obj2[_obj2<0] = 0
-    
-        _obj3 = WPMC*RHO*q
-        _obj3[[p for p in range(self.nproc) if p in mach_assign[m]]]=0
-
-        _obj5 = MU[solution,m]*q
-
-        _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum() + (_obj3).sum() + (WMMC*_obj5).sum()
-
-    def objective(self,assign=None):
         
-        if not assign:
-            raise("")
+        _obj3 = self.WPMC*self.RHO*moved
+        
+        _s = np.zeros(len(self.S),dtype=np.int32)
+        _m=moved.sum(axis=0)
+        for s in range(len(self.S)):
+            _s[s] = _m[self.S[s]].sum()
 
-        moved_proc = [n for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]]
+        
+        _obj4=max(_s)
 
+        _obj5 = self.MU[self._assign,solution]
+        
+        _obj = (self.Wlc*_obj1).sum() + (self.Wbal*_obj2).sum() + (_obj3).sum() + (self.WSMC*_obj4) + (self.WMMC*_obj5).sum()
+
+        return _obj
         
 
