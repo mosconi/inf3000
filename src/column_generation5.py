@@ -72,3 +72,6 @@ if not os.path.exists(assignfile):
 inst = Instance(model=modelfile, assign=assignfile)
 
 
+cg = CG5(inst)
+
+cg.
