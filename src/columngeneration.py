@@ -22,9 +22,21 @@ class CG5:
         self.__mip.ModelSense = GRB.MINIMIZE
 
         # set up MIP vars
-        
-        self.__
 
+        for m in range(self.__instance.nmach):
+            
+        
+        self.__mip.update()
+
+        # set up MIP constraints
+
+        ## all process must be assigned
+
+
+        ## all machine must have an allocation
+
+        
+        self.__mip.update()
         
         
     def __model_pre_optimize(self):
