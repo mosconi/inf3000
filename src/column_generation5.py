@@ -8,7 +8,7 @@ from instance import Instance
 
 from gurobipy import *
 
-from columngeneration import GC5
+from columngeneration import CG5
 
 rows, columns = os.popen('stty size', 'r').read().split()
 np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+20.3f" % x,'int': lambda x: "%+20d" % x, })
@@ -74,3 +74,5 @@ inst = Instance(model=modelfile, assign=assignfile)
 
 cg = CG5(inst)
 
+dir(cg)
+cg.dual_history()

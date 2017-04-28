@@ -12,16 +12,14 @@ class Instance:
 
         self._memo={}
         
-        self._inline=inline
-        self._loadmodel(model)
-        self._loadassign(assign)
+        self.__inline=inline
+        self.__loadmodel(model)
+        self.__loadassign(assign)
 
 
-    def _loadmodel(self,_modelfile):
+    def __loadmodel(self,_modelfile):
 
-        self.M=[]
-
-        if self._inline:
+        if self.__inline:
             lines = [list(map(int,l.rstrip('\n').split())) for l in _modelfile.split('\n')]
         else:
             f = open(_modelfile, "r")
@@ -116,18 +114,18 @@ class Instance:
         self.S = [s for s in S if s]    
 
 
-    def _loadassign(self, _assignfile):
+    def __loadassign(self, _assignfile):
 
-        if self._inline:
+        if self.__inline:
             line = [int(l) for l in _assignfile.split()]
         else:
             f = open(_assignfile, "r")
             line = [list(map(int,l.rstrip('\n').split())) for l in f][0]
-            close(f)
-        self._assign=line[:]
+            f.close()
+        self.__assign=line[:]
 
     def assign(self):
-        return self._assign
+        return self.__assign
         
     def validate(self,solution=None):
 
@@ -151,8 +149,8 @@ class Instance:
         for m in range(self.nmach):
             for p in range(self.nproc):
                 q[m][p] = _sol[p] ==m
-                q_o[m][p] = self._assign[p] ==m
-                if self._assign[p] == m and solution[p] != m:
+                q_o[m][p] = self.__assign[p] ==m
+                if self.__assign[p] == m and solution[p] != m:
                     moved_proc[m][p] =1
 
         #print(moved_proc)
@@ -232,7 +230,7 @@ class Instance:
         
         _obj4=max(_s)
 
-        _obj5 = self.MU[self._assign,solution]
+        _obj5 = self.MU[self.__assign,solution]
         
         _obj = (self.Wlc*_obj1).sum() + (self.Wbal*_obj2).sum() + (_obj3).sum() + (self.WSMC*_obj4) + (self.WMMC*_obj5).sum()
 

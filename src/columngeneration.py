@@ -11,15 +11,32 @@ class CG5:
         if instance is None:
             raise Exception("instance not defined")
 
-        self._instance = instance
+        self.__instance = instance
         self._hsz = historysize
+        self.__mip = None
 
+    def __build_model(self):
+        if self.__mip not None: return
+
+        self.__mip = Model("mip")
+        self.__mip.ModelSense = GRB.MINIMIZE
+
+        # set up MIP vars
+        
+        self.__
+
+        
+        
+    def __model_pre_optimize(self):
+        
+        pass
+    
     def __dual_history(self,slack=0.0):
-        _hpi = npzeros((self._hzs,self.instance.nproc) dtype=np.float64)
-        _halpha = npzeros((self._hzs,self.instance.nmach) dtype=np.float64)
+        _hpi = np.zeros((self._hsz,self.__instance.nproc), dtype=np.float64)
+        _halpha = np.zeros((self._hsz,self.__instance.nmach), dtype=np.float64)
 
         for h in range(self._hsz):
-            (pi,alpha) = _model_pre_optimize(self)
+            (pi,alpha) = self.__model_pre_optimize(self)
 
             _hpi[h] = pi
             _halpha[h] = alpha
@@ -96,8 +113,13 @@ class CG5:
 
         pass
 
+    def dual_history(self):
+        self.__dual_history()
+
     def solve(self):
         self.__dual_history()
+        print(self)
+        pass
         for _xi in self.xis:
             self.__solve_boxed(_xi)
             self.__rebox()
