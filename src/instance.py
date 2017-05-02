@@ -123,9 +123,61 @@ class Instance:
             line = [list(map(int,l.rstrip('\n').split())) for l in f][0]
             f.close()
         self.__assign=line[:]
+        self.__mach_assign=[[p[0] for p in enumerate(line) if p[1] == m]  for m in range(self.nmach)]
+        self.__mach_map_assign=np.array([[p==m for p in line ] for m in range(self.nmach)],dtype=np.int32)
 
     def assign(self):
         return self.__assign
+
+    def mach_assign(self):
+        return self.__mach_assign
+
+    def mach_map_assign(self):
+        return self.__mach_map_assign
+
+
+    def mach_validate(self, machine = None, map_assign = None):
+
+        if machine is None:
+            raise Exception("")
+
+        if map_assign is None:
+            raise Exception("")
+
+        _util = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
+
+        if _util > self.C[machine]:
+            return False
+
+        _obj1 = _util - self.SC[machine]
+        _obj1[_obj1<0]=0
+
+        _avail = self.C[machine] - _util
+
+        _obj2 = np.array([[
+            self.bT[r1,r2]*_avail[r1] - _avail[r2] 
+            for r2 in range(self.nres)] 
+                          for r1 in range(self.nres)],
+                         dtype=np.int32
+        )
+        _obj2[_obj2<0] = 0
+        
+        
+
+        return True
+
+    def mach_objective(self, machine = None, map_assign = None):
+        if machine is None:
+            raise Exception("")
+
+        if assign is None:
+            raise Exception("")
+
+        if not self.mach_validate(machine, assign):
+            raise Exception("")
+
+
+
         
     def validate(self,solution=None):
 
@@ -237,3 +289,4 @@ class Instance:
         return _obj
         
 
+    

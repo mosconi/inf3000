@@ -74,5 +74,5 @@ inst = Instance(model=modelfile, assign=assignfile)
 
 cg = CG5(inst)
 
-dir(cg)
+#dir(cg)
 cg.dual_history()
