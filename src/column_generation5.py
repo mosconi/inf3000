@@ -72,7 +72,8 @@ if not os.path.exists(assignfile):
 inst = Instance(model=modelfile, assign=assignfile)
 
 
-cg = CG5(inst)
+cg = CG5(inst,historysize=100)
 
-#dir(cg)
 cg.dual_history()
+print(cg._pi_ub)
+print(cg._pi_lb)

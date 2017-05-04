@@ -11,6 +11,7 @@ class Instance:
     def __init__ (self,model=None,assign=None,inline=False):
 
         self._memo={}
+        self.__mach_memo = None
         
         self.__inline=inline
         self.__loadmodel(model)
@@ -113,6 +114,8 @@ class Instance:
     
         self.S = [s for s in S if s]    
 
+        self.__mach_memo=[{} for m in range(self.nmach)]
+
 
     def __loadassign(self, _assignfile):
 
@@ -129,11 +132,14 @@ class Instance:
     def assign(self):
         return self.__assign
 
-    def mach_assign(self):
-        return self.__mach_assign
+    def mach_assign(self,m):
+        return self.__mach_assign[m]
 
-    def mach_map_assign(self):
+    def map_assign(self):
         return self.__mach_map_assign
+
+    def mach_map_assign(self,m):
+        return self.__mach_map_assign[m]
 
 
     def mach_validate(self, machine = None, map_assign = None):
@@ -146,7 +152,7 @@ class Instance:
 
         _util = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
 
-        if _util > self.C[machine]:
+        if any(_util > self.C[machine]):
             return False
 
         _obj1 = _util - self.SC[machine]
@@ -162,7 +168,27 @@ class Instance:
         )
         _obj2[_obj2<0] = 0
         
+        for s in self.S:
+            if map_assign[s].sum() > 1:
+                print(map_assign[s])
+                return False
+
+        moved_procs = map_assign - self.__mach_map_assign[machine]
+        print(map_assign)
+        print( self.__mach_map_assign[machine] )
+        print(moved_procs)
+        print()
+
+        moved_procs[moved_procs<0]=0
         
+        _obj3=self.RHO*moved_procs
+        _obj5=np.array([0],dtype=np.int32)
+
+        self.__mach_memo[machine][tuple(map_assign)]={
+            'obj':_obj1.sum()+_obj2.sum()+_obj3.sum()+_obj5.sum(),
+            'util': _util,
+            'moved_proc': moved_procs
+        }
 
         return True
 
@@ -170,11 +196,16 @@ class Instance:
         if machine is None:
             raise Exception("")
 
-        if assign is None:
+        if map_assign is None:
             raise Exception("")
 
-        if not self.mach_validate(machine, assign):
+        if not self.mach_validate(machine, map_assign):
             raise Exception("")
+
+        _obj = self.__mach_memo[machine][tuple(map_assign)]['obj']
+
+        return _obj
+
 
 
 

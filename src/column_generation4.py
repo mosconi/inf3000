@@ -197,6 +197,7 @@ for m in range(nmach):
     
     _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum()
 
+
     lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
 
         
