@@ -15,6 +15,7 @@ class CG5:
         self._hsz = historysize
         self.__mip = None
         self.__epslon = epslon
+        self.__k = 0
 
     def __build_model(self):
         if self.__mip: 
@@ -26,6 +27,7 @@ class CG5:
         # set up MIP vars
         mach_map_assign = self.__instance.map_assign()
         self.__lbd = [[] for m in range(self.__instance.nmach)]
+        self.__q = [[] for m in range(self.__instance.nmach)]
 
         for m in range(self.__instance.nmach):
             obj = self.__instance.mach_objective(m, mach_map_assign[m])
@@ -75,7 +77,6 @@ class CG5:
         C = self.__instance.C[machine]
         SC = self.__instance.SC[machine]
         MU = self.__instance.MU[self.__instance.assign(),machine]
-        print(MU)
         Wlc = self.__instance.Wlc
         Wbal = self.__instance.Wbal
         WPMC = self.__instance.WPMC
@@ -162,6 +163,15 @@ class CG5:
             name="overload"
         )
 
+        S =  self.__instance.S
+        model.addConstrs(
+            (
+                quicksum(x[p] for p in S[s] ) <= 1
+                for s in range(len(S))
+            ),
+            name="conflict"
+        )
+
         model.addConstr(
             obj1 == quicksum(Wlc[r]*d[r]
                 for r in range(nres)
@@ -209,26 +219,50 @@ class CG5:
             dtype=np.int32
         )
 
-        return tuple([int(obj1.X + obj2.X + obj3.X + obj5.X), q])
-        
-    def __model_pre_optimize(self):
-        if not self.__mip:
-            self.__build_model()
+        return tuple([int(obj1.X + obj2.X + obj3.X + obj5.X), model.objVal, q])
+
+    def __relax(self):
+        self.__mip.update()
 
         master = self.__mip.relax()
         p_constr = [master.getConstrByName("p_alloc[%d]" % p) for p in range(self.__instance.nproc)] 
         m_constr = [master.getConstrByName("m_assign[%d]" % m) for m in range(self.__instance.nmach)] 
 
-        master.Params.OutputFlag = 0 
+        return tuple([master, p_constr, m_constr])
+
+
+    def build_model():
+        self.__build_model()
+        
+    def __model_pre_optimize(self):
+        if not self.__mip:
+            self.__build_model()
+
+        (master, p_constr, m_constr) = self.__relax()
+
+        master.Params.OutputFlag = 0
         master.optimize()
 
+        self._last_obj = master.objVal
+        
         pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
         alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
-    
+
+        # print([[master.getCol(v)] for v in master.getVars() if v.X > .5])
+
+        _skip = [ False ]* self.__instance.nmach
+
         for m in range(self.__instance.nmach):
-            (obj, q) = self.__compute_column(m, pi, alpha[m])
+            _skip[m] = False
+            (obj_roadef, obj,  q) = self.__compute_column(m, pi, alpha[m])
+            print("mach %d %+20.3f %+20.3f " % (m, obj_roadef, obj ))
+            if obj > -self.__epslon:
+                _skip[m] = True
+                continue
+                
             if not self.__instance.mach_validate(m,q):
-                print("coluna invalida")
+                _skip[m] = True
+                continue
                 
             col = Column()
             col.addTerms(
@@ -238,13 +272,16 @@ class CG5:
             col.addTerms([1],[self.__m_assign[m]])
                          
             self.__lbd[m].append(
-                self.__mip.addVar(obj=obj,
+                self.__mip.addVar(obj=obj_roadef,
                                   vtype=GRB.BINARY,
                                   column=col,
                                   name="lbd_%d[%d]" % (m, len(self.__lbd[m]))
                 )
             )
+
             self.__mip.update()
+        if all(_skip):
+            raise Exception("All collumns generated are not valid.")
 
         return tuple([master.ObjVal, pi, alpha])
 
@@ -258,14 +295,18 @@ class CG5:
 
         for h in range(self._hsz):
             print("dual history %d" %h)
-            (obj,pi,alpha) = self.__model_pre_optimize()
-            print(pi)
+            try:
+                (obj,pi,alpha) = self.__model_pre_optimize()
+                print(obj)
+            except Exception as e:
+                print("break")
+                print(e)
+                break
+
+            
             _hpi[h] = pi
             _halpha[h] = alpha
-            print()
 
-        print(_hpi)
-        
         self._pi_lb = _hpi.min(axis=0) * (1 - slack)
         self._pi_ub = _hpi.max(axis=0) * (1 + slack)
 
@@ -312,35 +353,115 @@ class CG5:
 
             
     def __solve_boxed(self, xi=0.0):
-        self.mip.update()
-        master = self.mip.relax()
 
-        rlx_proc_constr = [relax_mdl.getConstrByName("p_alloc[%d]" % p ) for p in range(self.instance.nproc)]
-        rlx_mach_constr = [relax_mdl.getConstrByName("m_assign[%d]" % m ) for m in range(self.instance.nmach)]
+        (master, p_constr, m_constr) = self.__relax()
 
-        for p in range(self.instance.nproc):
-            col_ub = Column()
-            col_lb = Column()
+        pi_lb = self._pi_lb
+        pi_ub = self._pi_ub
 
-            col_ub.addTerms([+1], [rlx_proc_constr[p]])
-            col_lb.addTerms([-1], [rlx_proc_constr[p]])
-
-            w_ub = relax_mdl.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=xi,name="w_ub[%d]"%p,obj=pi_ub[p], column=col_ub)
-            w_lb = relax_mdl.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=xi,name="w_lb[%d]"%p,obj=pi_lb[p], column=col_lb)
-
-        for m in range(self.instance.nmach):
-            col_ub = Column()
-            col_lb = Column()
-
-            col_ub.addTerms([+1], [rlx_mach_constr[m]])
-            col_lb.addTerms([-1], [rlx_mach_constr[m]])
+        alpha_lb = self._alpha_lb
+        alpha_ub = self._alpha_ub
 
         
+        for p in range(self.__instance.nproc):
+            col_ub = Column()
+            col_lb = Column()
 
-        pass
+            col_ub.addTerms([+1], [p_constr[p]])
+            col_lb.addTerms([-1], [p_constr[p]])
+
+            w_ub = master.addVar(vtype=GRB.CONTINUOUS,
+                                 lb=0,
+                                 ub=xi,
+                                 name="w_ub[%d]"%p,
+                                 obj=pi_ub[p],
+                                 column=col_ub)
+            w_lb = master.addVar(vtype=GRB.CONTINUOUS,
+                                 lb=0,
+                                 ub=xi,
+                                 name="w_lb[%d]"%p,
+                                 obj=pi_lb[p],
+                                 column=col_lb)
+
+        for m in range(self.__instance.nmach):
+            col_ub = Column()
+            col_lb = Column()
+
+            col_ub.addTerms([+1], [m_constr[m]])
+            col_lb.addTerms([-1], [m_constr[m]])
+
+            v_ub = master.addVar(vtype=GRB.CONTINUOUS,
+                                 lb=0,
+                                 ub=xi,
+                                 name="v_ub[%d]"%p,
+                                 obj=alpha_ub[m],
+                                 column=col_ub)
+            v_lb = master.addVar(vtype=GRB.CONTINUOUS,
+                                 lb=0,
+                                 ub=xi,
+                                 name="v_lb[%d]"%p,
+                                 obj=alpha_lb[m],
+                                 column=col_lb)
+        
+
+        master.update()
+        master.Params.OutputFlag=0
+        master.optimize()
+        
+        pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
+        alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
+
+        # print([[master.getCol(v)] for v in master.getVars() if v.X > .5])
+
+        _skip = [ False ]* self.__instance.nmach
+
+        for m in range(self.__instance.nmach):
+            _skip[m] = False
+            (obj_roadef, obj,  q) = self.__compute_column(m, pi, alpha[m])
+            if obj > -self.__epslon:
+                _skip[m] = True
+                continue
+                
+            if not self.__instance.mach_validate(m,q):
+                _skip[m] = True
+                continue
+                
+            col = Column()
+            col.addTerms(
+                q,
+                [self.__p_alloc[p] for p in range(self.__instance.nproc)]
+            )
+            col.addTerms([1],[self.__m_assign[m]])
+                         
+            self.__lbd[m].append(
+                self.__mip.addVar(obj=obj_roadef,
+                                  vtype=GRB.BINARY,
+                                  column=col,
+                                  name="lbd_%d[%d]" % (m, len(self.__lbd[m]))
+                )
+            )
+
+            self.__mip.update()
+        if all(_skip):
+            raise Exception("All collumns generated are not valid.")
+
+        return tuple([master.ObjVal, pi, alpha])
+
 
     def dual_history(self):
         self.__dual_history()
+
+
+    def solve_boxed(self, xi):
+        try:
+            (obj, pi, alpha) = self.__solve_boxed(xi)
+            print("pi")
+            print(pi)
+            print(self._pi_lb - pi)
+            print(self._pi_ub - pi)
+        except:
+            return
+        
 
     def solve(self):
         self.__dual_history()

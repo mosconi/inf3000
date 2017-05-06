@@ -145,10 +145,14 @@ class Instance:
     def mach_validate(self, machine = None, map_assign = None):
 
         if machine is None:
-            raise Exception("")
+            raise Exception("Machine is empty")
 
         if map_assign is None:
-            raise Exception("")
+            raise Exception("Map_assign is empty")
+
+        if tuple(map_assign) in self.__mach_memo[machine]:
+            print("coluna já calculada")
+            return False
 
         _util = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
 
@@ -168,16 +172,11 @@ class Instance:
         )
         _obj2[_obj2<0] = 0
         
-        for s in self.S:
-            if map_assign[s].sum() > 1:
-                print(map_assign[s])
-                return False
+#        for s in self.S:
+#            if map_assign[s].sum() > 1:
+#                return False
 
         moved_procs = map_assign - self.__mach_map_assign[machine]
-        print(map_assign)
-        print( self.__mach_map_assign[machine] )
-        print(moved_procs)
-        print()
 
         moved_procs[moved_procs<0]=0
         
@@ -185,11 +184,12 @@ class Instance:
         _obj5=np.array([0],dtype=np.int32)
 
         self.__mach_memo[machine][tuple(map_assign)]={
-            'obj':_obj1.sum()+_obj2.sum()+_obj3.sum()+_obj5.sum(),
+            'obj': (self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum(),
             'util': _util,
             'moved_proc': moved_procs
         }
 
+        print("ok")
         return True
 
     def mach_objective(self, machine = None, map_assign = None):

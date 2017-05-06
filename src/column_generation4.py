@@ -182,6 +182,7 @@ lbd=[[] for m in range(nmach)]
 q=[[] for m in range(nmach)]
 
 if verbose: print(" alloc inicial de" ,end =' ', flush=True)
+print()
 for m in range(nmach):
     
     # Calculando custo da alocação inicial
@@ -196,8 +197,7 @@ for m in range(nmach):
     _obj2[_obj2<0] = 0
     
     _obj = (Wlc*_obj1).sum() + (Wbal*_obj2).sum()
-
-
+    
     lbd[m].append(master_mdl.addVar(obj=_obj,vtype=GRB.BINARY,name="lbd_%d[0]"%m))
 
         
@@ -251,7 +251,7 @@ while continue_condition:
     alpha_lb[abs(alpha_lb)<epslon ] = - alpha_ub[abs(alpha_lb)<epslon ]
     alpha_ub[abs(alpha_ub)<epslon ] = - alpha_lb[abs(alpha_ub)<epslon ]
     
-    
+
     if k >= hsz:
         pi_lb = hpi.min(axis=0) * (1-slack)
         pi_ub = hpi.max(axis=0) * (1+slack)
@@ -581,6 +581,8 @@ for m in range(nmach):
     if verbose: print()
     sol[_q==1] = m
 #    print(sol)
+
+print("SOL")
 
 print(np.array(assign,dtype=np.int32))
 print(sol)

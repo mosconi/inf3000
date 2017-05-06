@@ -72,8 +72,9 @@ if not os.path.exists(assignfile):
 inst = Instance(model=modelfile, assign=assignfile)
 
 
-cg = CG5(inst,historysize=100)
+cg = CG5(inst)
 
 cg.dual_history()
-print(cg._pi_ub)
-print(cg._pi_lb)
+print("boxed")
+
+cg.solve_boxed(10000)
