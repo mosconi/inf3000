@@ -189,7 +189,6 @@ class Instance:
             'moved_proc': moved_procs
         }
 
-        print("ok")
         return True
 
     def mach_objective(self, machine = None, map_assign = None):

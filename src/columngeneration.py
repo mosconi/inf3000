@@ -319,19 +319,35 @@ class CG5:
         self._alpha_lb[abs(self._alpha_lb)<self.__epslon ] = - self._alpha_ub[abs(self._alpha_lb)<self.__epslon ]
         self._alpha_ub[abs(self._alpha_ub)<self.__epslon ] = - self._alpha_lb[abs(self._alpha_ub)<self.__epslon ]
 
-    def __box_recenter(self):
-        for p in range(self.instance.nproc):
-            if abs(self._last_pi[p] - self._pi_lb[p]) < self.__epslon:
-                self._pi_lb[p]*=(1 - slack)
-            if abs(self._last_pi[p] - self._pi_ub[p]) < self.__epslon:
-                self._pi_ub[p]*=(1 + slack)
+        self._pi_lb[abs(self._pi_lb)<self.__epslon ] = - 1
+        self._pi_ub[abs(self._pi_ub)<self.__epslon ] = + 1
 
-        for m in range(self.instance.nmach):
-            if abs(self._last_alpha[m] - self._alpha_lb[m]) < self.__epslon:
-                self._alpha_lb[m]*=(1 - slack)
-            if abs(self._last_alpha[m] - self._alpha_ub[m]) < self.__epslon:
-                self._alpha_ub[m]*=(1 + slack)
+        self._alpha_lb[abs(self._alpha_lb)<self.__epslon ] = - 1
+        self._alpha_ub[abs(self._alpha_ub)<self.__epslon ] = + 1
+        
 
+    def __box_recenter(self, slack=0.5):
+        ub = self._pi_ub - self._last_pi
+        adj = abs(self._pi_ub[abs(ub)< self.__epslon] * (1 - slack))
+        if adj.size > 0:
+            self._pi_ub[abs(ub)< self.__epslon] += adj
+        
+        lb = self._pi_lb - self._last_pi
+        adj= abs(self._pi_lb[abs(lb)< self.__epslon] * (1 - slack))
+        if adj.size > 0:
+            self._pi_lb[abs(lb)< self.__epslon] -= adj
+        
+        ub = self._alpha_ub - self._last_alpha
+        adj = abs(self._alpha_ub[abs(ub)< self.__epslon] * (1 - slack))
+        if adj.size > 0:
+            self._alpha_ub[abs(ub)< self.__epslon] += adj
+        
+        lb = self._alpha_lb - self._last_alpha
+        adj= abs(self._alpha_lb[abs(lb)< self.__epslon] * (1 - slack))
+        if adj.size > 0:
+            self._alpha_lb[abs(lb)< self.__epslon] -= adj
+
+        
     def __rebox(self):
         for _pi in self._last_pi:
             self._pi_lb = self._last_pi * (1 - slack)
@@ -453,14 +469,15 @@ class CG5:
 
 
     def solve_boxed(self, xi):
-        try:
-            (obj, pi, alpha) = self.__solve_boxed(xi)
-            print("pi")
-            print(pi)
-            print(self._pi_lb - pi)
-            print(self._pi_ub - pi)
-        except:
-            return
+        (obj, pi, alpha) = self.__solve_boxed(xi)
+        print("pi")
+        print(pi)
+        self._last_pi = pi
+        self._last_alpha = alpha
+        print(self._pi_ub )
+        self.__box_recenter()
+        print(self._pi_ub )
+
         
 
     def solve(self):

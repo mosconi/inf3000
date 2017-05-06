@@ -77,4 +77,5 @@ cg = CG5(inst)
 cg.dual_history()
 print("boxed")
 
-cg.solve_boxed(10000)
+for i in range(4):
+    cg.solve_boxed(10000)
