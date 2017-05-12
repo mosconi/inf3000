@@ -75,7 +75,20 @@ inst = Instance(model=modelfile, assign=assignfile)
 cg = CG5(inst)
 
 cg.dual_history()
-print("boxed")
 
-for i in range(4):
-    cg.solve_boxed(10000)
+xis = [1000, 100, 10, 1, 0] 
+
+
+for xi in xis:
+    print("boxed ", xi)
+    i = 0
+    while(True):
+        print(" %d" % i)
+        i+=1
+        try:
+            cg.solve_boxed(xi)
+        except Exception as e:
+            print(e)
+            break
+    
+        
