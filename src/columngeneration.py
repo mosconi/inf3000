@@ -434,6 +434,7 @@ class CG5:
         for m in range(self.__instance.nmach):
             _skip[m] = False
             (obj_roadef, obj,  q) = self.__compute_column(m, pi, alpha[m])
+            print("mach %d %+20.3f %+20.3f " % (m, obj_roadef, obj ))
             if obj > -self.__epslon:
                 _skip[m] = True
                 continue
@@ -470,13 +471,9 @@ class CG5:
 
     def solve_boxed(self, xi):
         (obj, pi, alpha) = self.__solve_boxed(xi)
-        print("pi")
-        print(pi)
         self._last_pi = pi
         self._last_alpha = alpha
-        print(self._pi_ub )
         self.__box_recenter()
-        print(self._pi_ub )
 
         
 
