@@ -1,5 +1,11 @@
 import numpy as np
 
+def _maptoint(m):
+    a = 0
+    for b in m:
+        a = a*2 + b.item()
+    return a
+
 class Instance:
     def __new__(cls, model=None, assign=None,inline=False):
         if not model:
@@ -150,7 +156,7 @@ class Instance:
         if map_assign is None:
             raise Exception("Map_assign is empty")
 
-        if tuple(map_assign) in self.__mach_memo[machine]:
+        if _maptoint(map_assign) in self.__mach_memo[machine]:
             print("coluna já calculada")
             return False
 
@@ -183,7 +189,8 @@ class Instance:
         _obj3=self.RHO*moved_procs
         _obj5=np.array([0],dtype=np.int32)
 
-        self.__mach_memo[machine][tuple(map_assign)]={
+        
+        self.__mach_memo[machine][_maptoint(map_assign)]={
             'obj': (self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum(),
             'util': _util,
             'moved_proc': moved_procs
@@ -201,7 +208,7 @@ class Instance:
         if not self.mach_validate(machine, map_assign):
             raise Exception("")
 
-        _obj = self.__mach_memo[machine][tuple(map_assign)]['obj']
+        _obj = self.__mach_memo[machine][_maptoint(map_assign)]['obj']
 
         return _obj
 
