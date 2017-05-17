@@ -74,13 +74,16 @@ inst = Instance(model=modelfile, assign=assignfile)
 
 cg = CG5(inst, epslon=0.5)
 
-cg.dual_history(50)
+cg.dual_history(10)
 
-xis = [5.0*10**i for i in range(10,-1,-1)]
+xis = [5.0*10**(i) for i in range(10,-1,-2)]
 
 print(xis)
 
 for xi in xis:
+    print(cg._pi_ub)
+    print(cg._pi_lb)
+
     print("boxed ", xi)
     i = 0
     while(True):
@@ -92,6 +95,8 @@ for xi in xis:
             print(e)
             break
     cg.rebox()
+    print(cg._pi_ub)
+    print(cg._pi_lb)
 
     cg.solve_mip()
         
