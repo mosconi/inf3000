@@ -347,24 +347,27 @@ class CG5:
         if adj.size > 0:
             self._alpha_lb[abs(lb)< self.__epslon] -= adj
 
+
+    def rebox(self,slack=0.1):
+        self.__rebox(slack)
         
-    def __rebox(self):
+    def __rebox(self,slack):
         for _pi in self._last_pi:
             self._pi_lb = self._last_pi * (1 - slack)
             self._pi_ub = self._last_pi * (1 + slack)
-            if abs(self._pi_lb)< self.__epslon:
-                self._pi_lb = -1
-            if abs(self._pi_ub)< self.__epslon:
-                self._pi_lb = +1
+            if np.any(np.absolute(self._pi_lb)< self.__epslon):
+                self._pi_lb[np.absolute(self._pi_lb)< self.__epslon] = -1
+            if np.any(np.absolute(self._pi_ub)< self.__epslon):
+                self._pi_ub[np.absolute(self._pi_ub)< self.__epslon] = +1
 
                 
         for _alpha in self._last_alpha:
             self._alpha_lb = self._last_alpha * (1 - slack)
             self._alpha_ub = self._last_alpha * (1 + slack)
-            if abs(self._alpha_lb)< self.__epslon:
-                self._alpha_lb = -1
-            if abs(self._alpha_ub)< self.__epslon:
-                self._alpha_lb = +1
+            if np.any(np.absolute(self._alpha_lb)< self.__epslon):
+                self._alpha_lb[np.absolute(self._alpha_lb)< self.__epslon] = -1
+            if np.any(np.absolute(self._alpha_ub)< self.__epslon):
+                self._alpha_ub[np.absolute(self._alpha_ub)< self.__epslon] = +1
 
 
             
@@ -465,12 +468,16 @@ class CG5:
         return tuple([master.ObjVal, pi, alpha])
 
 
-    def dual_history(self):
-        self.__dual_history()
+    def dual_history(self,hsz=10,slack=0.5):
+        self.__hsz= hsz
+        self.__dual_history(slack)
 
 
     def solve_boxed(self, xi):
-        (obj, pi, alpha) = self.__solve_boxed(xi)
+        try:
+            (obj, pi, alpha) = self.__solve_boxed(xi)
+        except Exception as e:
+            raise e
         self._last_pi = pi
         self._last_alpha = alpha
         self.__box_recenter()
@@ -485,9 +492,23 @@ class CG5:
             self.__rebox()
             
 
-    
+    def solve_mip(self):
+        self.__mip.write("cg5.lp")
+#        self.__mip.Params.OutputFlag=0
+        self.__mip.optimize()
 
-
+             
+    def map_solution(self):
+        for m in range(self.__instance.nmach):
+            _lbd = [ _a for _a in self.__lbd[m] if _a.X > .5][0]
+            print(_lbd.VarName)
+            _col = self.__mip.getCol(_lbd)
+            for c_idx in range(len(self.__p_alloc)):
+                for c_col in range(_col.size()):
+                    if self.__p_alloc[c_idx] == _col.getConstr(c_col):
+                        print(c_idx, end=' ', flush=True)
+            print()
+            
 
     
 

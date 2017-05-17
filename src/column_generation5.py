@@ -72,23 +72,31 @@ if not os.path.exists(assignfile):
 inst = Instance(model=modelfile, assign=assignfile)
 
 
-cg = CG5(inst)
+cg = CG5(inst, epslon=0.5)
 
-cg.dual_history()
+cg.dual_history(50)
 
-xis = [1000, 100, 10, 1, 0] 
+xis = [5.0*10**i for i in range(10,-1,-1)]
 
+print(xis)
 
 for xi in xis:
     print("boxed ", xi)
     i = 0
     while(True):
-        print(" %d" % i)
+        print("%0.3f %d" % (xi,i))
         i+=1
         try:
             cg.solve_boxed(xi)
         except Exception as e:
             print(e)
             break
-    
+    cg.rebox()
+
+    cg.solve_mip()
         
+    cg.map_solution()
+
+cg.solve_mip()
+        
+cg.map_solution()
