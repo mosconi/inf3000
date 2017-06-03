@@ -65,7 +65,10 @@ class CG5:
 
         self.__mip.update()
         
-        
+    def compute_column(self,machine, pi, alpha):
+        return self.__compute_column(machine, pi, alpha)
+
+
     def __compute_column(self,machine, pi, alpha):
 
         nres = self.__instance.nres
@@ -497,6 +500,9 @@ class CG5:
 #        self.__mip.Params.OutputFlag=0
         self.__mip.optimize()
 
+    def solve_relax(self):
+        return self.__relax()
+
              
     def map_solution(self):
         for m in range(self.__instance.nmach):
@@ -510,7 +516,8 @@ class CG5:
             print()
             
 
-    
+    def generate_companion_columns(self,machine, col):
+        pass
 
         
 
