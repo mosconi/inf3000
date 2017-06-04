@@ -234,8 +234,24 @@ class CG5:
         return tuple([master, p_constr, m_constr])
 
 
-    def build_model():
+    def build_model(self):
         self.__build_model()
+
+    def solve_relax(self):
+        if not self.__mip:
+            self.__build_model()
+
+        (master, p_constr, m_constr) = self.__relax()
+
+        master.Params.OutputFlag = 0
+        master.optimize()
+        
+        _obj = master.objVal
+        
+        _pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
+        _alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
+
+        return tuple([_obj, _pi, _alpha])
         
     def __model_pre_optimize(self):
         if not self.__mip:
@@ -496,11 +512,26 @@ class CG5:
             
 
     def solve_mip(self):
-        self.__mip.write("cg5.lp")
+#        self.__mip.write("cg5.lp")
 #        self.__mip.Params.OutputFlag=0
         self.__mip.optimize()
 
-    def solve_relax(self):
+        _obj = self.__mip.ObjVal
+        _X = None
+        _alloc = None
+        for m in range(self.__instance.nmach):
+            _lbd = [ _a for _a in self.__lbd[m] if _a.X > .5][0]
+            print(_lbd.VarName)
+            _col = self.__mip.getCol(_lbd)
+            for c_idx in range(len(self.__p_alloc)):
+                for c_col in range(_col.size()):
+                    if self.__p_alloc[c_idx] == _col.getConstr(c_col):
+                        print(c_idx, end=' ', flush=True)
+            print()
+        
+        return tuple([_obj, _X, _alloc])
+
+    def relax(self):
         return self.__relax()
 
              
@@ -515,10 +546,47 @@ class CG5:
                         print(c_idx, end=' ', flush=True)
             print()
             
+    def mip_add_col(self, machine=None, col=None, obj=None):
 
-    def generate_companion_columns(self,machine, col):
-        pass
+        if machine is None:
+            raise Exception("machine not defined")
 
+        if col is None:
+            raise Exception("column not defined")
+
+        if obj is None:
+            raise Exception("objective component not defined")
+
+
+        _col = Column()
+        _col.addTerms(
+            col,
+            [self.__p_alloc[p] for p in range(self.__instance.nproc)]
+        )
+        _col.addTerms([1],[self.__m_assign[machine]])
+                         
+        self.__lbd[machine].append(
+            self.__mip.addVar(obj=obj,
+                              vtype=GRB.BINARY,
+                              column=_col,
+                              name="lbd_%d[%d]" % (machine, len(self.__lbd[machine]))
+            )
+        )
+
+    def generate_companion_columns(self,machine=None, col=None,obj=None):
+
+        if machine is None:
+            raise Exception("Machine not defined")
+
+        if col is None:
+            raise Exception("Column not defined")
+
+        if obj is None:
+            obj = self.__instance.mach_objective(machine,col)
+
+        starting_col = cg.__instance()
+
+        
         
 
     
