@@ -115,6 +115,8 @@ while continue_cond:
 
     print("omega: %20.3f  (best:  %20.3f delta: %20.3f rat(obj/best): %20.3f)" % (omega, best_omega, z_rm - best_omega, z_rm/best_omega))
 
+    
+
     if omega > best_omega:
         print("best omega improvement %20.3f -> %20.3f" % (best_omega, omega))
         best_omega = omega
@@ -122,12 +124,13 @@ while continue_cond:
         best_alpha = alpha_rm
         input("Press Enter to continue...")
 
-    if abs(z_rm - best_omega) < epslon:
+    if abs(z_rm + best_omega) < epslon:
         contine_cond = False
         break
         
     k+=1
-
+#    if k>= 10:
+#        break
 
 (obj, X, alloc) = cg.solve_mip()
 

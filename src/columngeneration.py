@@ -586,7 +586,24 @@ class CG5:
 
         starting_col = cg.__instance()
 
+    def solve_lr(self,w=[]):
+        (lr, p_constr, m_constr) = self.__relax()
+        mu=lr.addVars(len(w),obj=w,name="mu")
+
+        lr.Params.OutputFlag = 0
+        lr.optimize()
         
+        _obj = lr.objVal
+        
+        _pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
+        _alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
+        _mu = np.array([mu[m].X for m in range(len(w))], dtype=np.float64)
+
+        return tuple([_obj, _pi, _alpha,_mu])
+
+
+        
+
         
 
     
