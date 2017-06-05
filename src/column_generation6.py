@@ -74,7 +74,12 @@ inst = Instance(model=modelfile, assign=assignfile)
 cg = CG5(inst, epslon=0.5)
 
 
-best_omega =  -float('Inf')
+# Initialize restricted DWM
+cg.build_model()
+
+# Initialize vars
+
+k=0
 
 continue_cond = True
 
@@ -82,21 +87,21 @@ best_pi = np.zeros(inst.nproc)
 best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
-beta = .5
-
-cg.build_model()
-
-k=0
+beta = .75
 
 while continue_cond:
+    # solve RDWM 
     (z_rm, pi_rm, alpha_rm) = cg.solve_relax()
 
+    # Compute pi_stabilized
     pi = beta * best_pi + ( 1 - beta ) * pi_rm
     alpha = beta * best_alpha  + ( 1 - beta ) * alpha_rm
 
+    
     omega = 0
     print(" iter %05d  obj: %+20.3f" %(k, z_rm) )
-    
+
+    # solve L(pi_st)
     for m in range(inst.nmach):
         print(" iter %05d  mach %05d => " % (k,m),end='')
         (roadef, w , q)= cg.compute_column(m, pi, alpha[m])

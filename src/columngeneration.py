@@ -170,7 +170,7 @@ class CG5:
         model.addConstrs(
             (
                 quicksum(x[p] for p in S[s] ) <= 1
-                for s in range(len(S))
+                for s in range(len(S)) if len(S[s]) >1
             ),
             name="conflict"
         )
@@ -602,6 +602,22 @@ class CG5:
         return tuple([_obj, _pi, _alpha,_mu])
 
 
+    def __compute_rc(self,var=None, pi=None, alpha=None):
+        if var is None:
+            raise Exception("Var not defined")
+
+
+        rc = var.Obj
+        
+        col=self.__mip.getCol(var)
+
+        for p in range(self.__instance.nproc):
+            rc -= col.getCoef(self.__p_alloc[p])*pi[p]
+        
+        for m in range(self.__instance.nmach):
+            rc -= col.getCoef(self.__m_assign[m])*alpha[m]
+
+        return rc
         
 
         
