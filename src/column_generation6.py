@@ -74,7 +74,7 @@ inst = Instance(model=modelfile, assign=assignfile)
 cg = CG5(inst, epslon=0.5)
 
 
-# Initialize restricted DWM
+# Initialize restricted master problem
 cg.build_model()
 
 # Initialize vars
@@ -91,25 +91,26 @@ beta = .75
 
 while continue_cond:
     # solve RDWM 
-    (z_rm, pi_rm, alpha_rm) = cg.solve_relax()
+    (z_rm, pi_rm, alpha_rm) = cg.solve_relax(k=k)
 
     # Compute pi_stabilized
     pi = beta * best_pi + ( 1 - beta ) * pi_rm
     alpha = beta * best_alpha  + ( 1 - beta ) * alpha_rm
 
-    
+    # omega é a soma dos custos reduzidos dos sub problemas
     omega = 0
     print(" iter %05d  obj: %+20.3f" %(k, z_rm) )
 
     # solve L(pi_st)
     for m in range(inst.nmach):
         print(" iter %05d  mach %05d => " % (k,m),end='')
-        (roadef, w , q)= cg.compute_column(m, pi, alpha[m])
+        (roadef, w , q,model)= cg.compute_column(m, pi, alpha[m])
 #        if w > - epslon:
 #            print("for break")
 #            break
 
         print("%20.3f (roadef: %20.3f rat: %20.10f)" % (w, roadef,abs(w/(roadef+1))))
+        cg.validate_column(q,m,w,roadef,pi,alpha[m],epslon,model)
         omega += w
         if len(q) < 100:
             print("add col", q)
@@ -121,7 +122,6 @@ while continue_cond:
     print("omega: %20.3f  (best:  %20.3f delta: %20.3f rat(obj/best): %20.3f)" % (omega, best_omega, z_rm - best_omega, z_rm/best_omega))
 
     
-
     if omega > best_omega:
         print("best omega improvement %20.3f -> %20.3f" % (best_omega, omega))
         best_omega = omega
@@ -134,8 +134,8 @@ while continue_cond:
         break
         
     k+=1
-#    if k>= 10:
-#        break
+    if k>= 250:
+        break
 
 (obj, X, alloc) = cg.solve_mip()
 
