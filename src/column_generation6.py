@@ -80,6 +80,7 @@ cg.build_model()
 # Initialize vars
 
 k=0
+impr=0
 
 continue_cond = True
 
@@ -87,11 +88,20 @@ best_pi = np.zeros(inst.nproc)
 best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
-beta = .75
+beta0 = .90
+betaJ = .97
+beta_min = .90
+
+beta = beta0
+
+
 
 while continue_cond:
     # solve RDWM 
-    (z_rm, pi_rm, alpha_rm) = cg.solve_relax(k=k)
+    (z_rm, pi_rm, alpha_rm) = cg.solve_relax()
+
+    if np.isnan(z_rm):
+        break
 
     # Compute pi_stabilized
     pi = beta * best_pi + ( 1 - beta ) * pi_rm
@@ -99,17 +109,16 @@ while continue_cond:
 
     # omega é a soma dos custos reduzidos dos sub problemas
     omega = 0
-    print(" iter %05d  obj: %+20.3f" %(k, z_rm) )
+    print(" iter %5d  obj: %+20.3f                                                              N: %3d, beta: %0.3f)" %(k, z_rm, impr, beta) )
 
     # solve L(pi_st)
     for m in range(inst.nmach):
-        print(" iter %05d  mach %05d => " % (k,m),end='')
+        print(" iter %5d  mach %5d => " % (k,m),end='')
         (roadef, w , q,model)= cg.compute_column(m, pi, alpha[m])
 #        if w > - epslon:
 #            print("for break")
-#            break
-
-        print("%20.3f (roadef: %20.3f rat: %20.10f)" % (w, roadef,abs(w/(roadef+1))))
+##            break
+        print("%20.3f (roadef: %20.3f)                      N: %3d, beta: %0.3f)" % (w, roadef, impr, beta))
         cg.validate_column(q,m,w,roadef,pi,alpha[m],epslon,model)
         omega += w
         if len(q) < 100:
@@ -117,25 +126,28 @@ while continue_cond:
         cg.mip_add_col(obj=roadef, col =q, machine=m)
 
         #cols = cg.generate_companion_columns(machine=m,col=q,obj=roadef
-        #for (_m,_obj,_col) in cols 
+        #for (_m,_obj,_col) in cols
 
-    print("omega: %20.3f  (best:  %20.3f delta: %20.3f rat(obj/best): %20.3f)" % (omega, best_omega, z_rm - best_omega, z_rm/best_omega))
+    print("omega: %20.3f (%20.3f) sum: %20.3f (%20.3f) N: %3d, beta: %0.3f)" % (omega, best_omega, z_rm + omega,z_rm + best_omega, impr, beta))
 
     
     if omega > best_omega:
+        impr += 1
+        beta = max(beta_min, beta0*(betaJ**impr))
+
         print("best omega improvement %20.3f -> %20.3f" % (best_omega, omega))
         best_omega = omega
-        best_pi = pi_rm
-        best_alpha = alpha_rm
-        input("Press Enter to continue...")
+        best_pi = pi
+        best_alpha = alpha
+        #input("Press Enter to continue...")
 
-    if abs(z_rm + best_omega) < epslon:
+    if  best_omega >- epslon:
         contine_cond = False
         break
         
     k+=1
-    if k>= 250:
-        break
+#    if k>= 250:
+#        break
 
 (obj, X, alloc) = cg.solve_mip()
 

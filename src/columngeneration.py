@@ -28,6 +28,7 @@ class CG5:
         mach_map_assign = self.__instance.map_assign()
         self.__lbd = [[] for m in range(self.__instance.nmach)]
         self.__q = [[] for m in range(self.__instance.nmach)]
+        self.__cols = [set([]) for m in range(self.__instance.nmach)]
 
         for m in range(self.__instance.nmach):
             obj = self.__instance.mach_objective(m, mach_map_assign[m])
@@ -91,7 +92,11 @@ class CG5:
         x = model.addVars(nproc, 
                           vtype=GRB.BINARY, 
                           name="x")
+        _x = model.addVars(nproc, 
+                          vtype=GRB.INTEGER, 
+                          name="_x")
 
+        
         u = model.addVars(nres,
                           lb=0,
                           ub=C,
@@ -119,7 +124,7 @@ class CG5:
                           lb=0,
                           vtype=GRB.INTEGER, 
                           name="b")
-
+        
         obj1 = model.addVar(lb=0,
                             vtype=GRB.INTEGER, 
                             name="obj1")
@@ -168,10 +173,10 @@ class CG5:
                 b[r1,r2] >= bT[r1,r2]*a[r1] - a[r2]
                 for r1 in range(nres)
                 for r2 in range(nres)
-            ), 
+            ),
             name="balance"
         )
-
+                
         model.addConstrs(
             (
                 d[r] >= u[r] - SC[r]
@@ -202,9 +207,17 @@ class CG5:
             ),
             name="obj2"
         )
+
+
+        model.addConstrs(
+            (
+                _x[p] == RHO[p]*x[p]
+                for p in range(nproc)
+            )
+        )
         
         model.addConstr(
-            obj3 == WPMC*quicksum(RHO[p]*x[p]
+            obj3 == WPMC*quicksum(_x[p]
             for p in [p for p in range(nproc) 
                       if p not in self.__instance.mach_assign(machine)]
             ),
@@ -261,7 +274,13 @@ class CG5:
             master.write("relax_%d.lp" % k)
         master.Params.OutputFlag = 0
         master.optimize()
-        
+
+        s = master.Status
+        if s == GRB.Status.INF_OR_UNBD or \
+           s == GRB.Status.INFEASIBLE or \
+           s == GRB.Status.UNBOUNDED or \
+           False:
+            return tuple([np.nan, [np.nan] , [np.nan] ])
         _obj = master.objVal
         
         _pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
@@ -529,7 +548,7 @@ class CG5:
 
     def solve_mip(self):
 #        self.__mip.write("cg5.lp")
-#        self.__mip.Params.OutputFlag=0
+        self.__mip.Params.OutputFlag=0
         self.__mip.optimize()
 
         _obj = self.__mip.ObjVal
@@ -573,6 +592,21 @@ class CG5:
         if obj is None:
             raise Exception("objective component not defined")
 
+        if tuple(col) in self.__cols[machine]:
+            for l in self.__lbd[machine]:
+                c2 = np.zeros((self.__instance.nproc),dtype=np.int64)
+                c = self.__mip.getCol(l)
+                for c3 in range(c.size()):
+                    for p in range(self.__instance.nproc):
+                        if c.getConstr(c3) == self.__p_alloc[p]:
+                            c2[p] =1
+                if all(c2 == col):
+                    print("col obj (o/n) %d   %d"  %( l.getAttr("Obj"), obj))
+            print("column already defined on machine %d" % machine)
+            return
+
+
+        self.__cols[machine].add(tuple(col))
 
         _col = Column()
         _col.addTerms(
@@ -644,48 +678,95 @@ class CG5:
 
         nproc = self.__instance.nproc
         nres = self.__instance.nres
-        _res = self.__instance.R*q.reshape(nproc,1)
-        _util = (_res).sum(axis=0)
-        _obj1 = _util - self.__instance.SC[m]
-        _obj1[_obj1<0]=0
         
-        _avail = self.__instance.C[m] - _util
-        _obj2=np.array([[self.__instance.bT[r1,r2]*_avail[r1] - _avail[r2] for r2 in range(nres)] for r1 in range(nres)])
-        _obj2[_obj2<0] = 0
-    
-        _obj3 = self.__instance.WPMC*self.__instance.RHO*q
-        _obj3[[p for p in range(nproc) if p in self.__instance.mach_assign(m)]]=0
+        R = self.__instance.R
+        RHO = self.__instance.RHO
+        bT = self.__instance.bT
+        C = self.__instance.C[m]
+        SC = self.__instance.SC[m]
+        MU = self.__instance.MU[self.__instance.assign(),m]
+        Wlc = self.__instance.Wlc
+        Wbal = self.__instance.Wbal
+        WPMC = self.__instance.WPMC
+        WMMC = self.__instance.WMMC
 
-        _obj5 = self.__instance.WMMC*self.__instance.MU[self.__instance.assign(),m]*q
+        x = q.reshape(nproc,1)
 
-        _v1 = sum([pi[p]*q[p] for p in range(nproc)])
-        _obj = (self.__instance.Wlc*_obj1).sum() + (self.__instance.Wbal*_obj2).sum() + (_obj3).sum() + (_obj5).sum()
+        _res = self.__instance.R*x
+        _util = _res.sum(axis=0)
+        _d = _util - SC
+        _d[_d<0]=0
+
+        _obj1=(Wlc*_d).sum()
+        
+        _a = C - _util
+
+        _b = np.empty((nres,nres),dtype=np.int64)
+        for r1 in range(nres):
+            for r2 in range(nres):
+                _b[r1,r2] = bT[r1,r2]*_a[r1] - _a[r2]
+
+        _b[_b<0] = 0
+        _obj2=(Wbal*_b).sum()
+
+        _rhox =  RHO*(x.reshape(nproc))
+
+        _rhox[[p for p in range(nproc) if p in self.__instance.mach_assign(m)]] =0
+        
+        _obj3 = WPMC*_rhox.sum()
+
+        _mu = MU*(x.reshape(nproc))
+        _mu[[p for p in range(nproc) if p in self.__instance.mach_assign(m)]] =0
+
+        _obj5 = WMMC*_mu.sum()
+
+        _pixp = sum([pi[p]*q[p] for p in range(nproc)])
+        _obj = _obj1 + _obj2+ _obj3 + _obj5
 
 
-        if abs(ObjVal - (_obj - _v1 - alpha)) > epslon:
+        if abs(ObjVal - (_obj - _pixp - alpha)) > epslon:
             print(">>>> cal mismatch!")
-            print("  delta:                  %+15.2f" % (ObjVal - (_obj - _v1)-alpha))
+            print("  delta:                  %+15.2f" % (ObjVal - (_obj - _pixp- alpha)))
             print("  epslon:                 %+15.2f" % epslon )
             print("")
 
-            print("  obj rc calc             %+15.2f"% (_obj - _v1))
+            print("  obj rc calc             %+15.2f"% (_obj - _pixp -alpha))
             print("  obj rc grb              %+15.2f"% ObjVal)
                         
             print("")
-            print("  obj roadef calc         %+15.2f"%_obj)
-            print("  obj roadef grb          %+15.2f"% roadef)
+            print("  obj roadef calc      %+15d"% _obj)
+            print("  obj roadef grb       %+15d"% roadef)
             print("  delta:                  %+15.2f" % (roadef - _obj))
             print("")
-   
-            obj1 = model.getVarByName("obj1")
-            print("  obj1 calc               %+15d"%(self.__instance.Wlc*_obj1).sum())
-            print("  obj1 grb                %+15.2f"% obj1.X)
-            print("  delta:                  %+15.2f" % ((obj1.X - (self.__instance.Wlc*_obj1).sum() )))
+
+            pixp = model.getVarByName("pixp")
+
+            delta = pixp.X - _pixp
+            
+            print("  pi*x calc               %+15.2f" % (_pixp) )
+            print("  pi*x grb                %+15.2f" % (pixp.X) )
+            print("  delta:                  %+15.2f" % delta)
             print("")
 
-            if obj1.X - (self.__instance.Wlc*_obj1).sum() > epslon:
-                u = [ model.getVarByName("u[0]") for r in range(nres)]
-                d = [ model.getVarByName("d[0]") for r in range(nres)]
+            if abs(delta) > epslon:
+                print("delta de pi*xp")
+   
+            obj1 = model.getVarByName("obj1")
+            obj2 = model.getVarByName("obj2")
+            obj3 = model.getVarByName("obj3")
+            obj5 = model.getVarByName("obj5")
+
+            delta = (obj1.X - (self.__instance.Wlc*_obj1).sum() )
+
+            
+            print("  obj1 calc            %+15d"%(self.__instance.Wlc*_obj1).sum())
+            print("  obj1 grb                %+15.2f"% obj1.X)
+            print("  delta:                  %+15.2f" % delta)
+            print("")
+
+            if abs(delta) > epslon:
+                u = [ model.getVarByName("u[%d]" % r) for r in range(nres)]
+                d = [ model.getVarByName("d[%d]" % r) for r in range(nres)]
                 print("  CALC _util")
                 print(_util)
                 print("  GRB  _util")
@@ -709,7 +790,7 @@ class CG5:
                 print("")
                     
                 print("  CALC _d")
-                print(_obj1)
+                print(_d)
                 print("  GRB  _d")
                 print(np.array([ d[r].X  for r in range(nres)], dtype = np.int64))
                 print("")
@@ -719,13 +800,77 @@ class CG5:
                 print("")
 
 
-            obj2 = model.getVarByName("obj2")
-            print("  obj2 calc               %+15d"%(self.__instance.Wbal*_obj2).sum())
-            print("  obj2 grb                %+15.2f"% obj2.X)
-            print("  delta:                  %+15.2f" % ((obj2.X - (self.__instance.Wbal*_obj2).sum() )))
+            delta = (obj2.X - (self.__instance.Wbal*_obj2).sum() )
+            
+            print("  obj2 calc            %+15d"%(self.__instance.Wbal*_obj2).sum())
+            print("  obj2 grb             %+15d"% obj2.X)
+            print("  delta:                  %+15.2f" % delta)
             print("")
+            if abs(delta) > epslon:
+                
+                u = np.array([ model.getVarByName("u[%d]" % r).X for r in range(nres)], dtype=np.int64)
+                a = np.array([ model.getVarByName("a[%d]" % r).X for r in range(nres)], dtype=np.int64)
+                b = np.array([ [model.getVarByName("b[%d,%d]" % (r1,r2)).X for r2 in range(nres)] for r1 in range(nres)], dtype=np.int64)
 
+                print("  Wbal")
+                print(self.__instance.Wbal)
+                print()
+                print("  bT")
+                print(self.__instance.bT)
+                print()
+                
+                print("  b calc")
+                print(_obj2)
+                print("  b grb")
+                print(b)
+                print("  deltas:")
+                print(b - _obj2)
 
-            print(model.getVars())
+                print("  a calc")
+                print(_a)
+                print("  a grb")
+                print(a)
+                print("  deltas:")
+                deltas = a - _a
+                print(deltas)
+
+                if any(abs(deltas)) > epslon:
+                    print("  C")
+                    print(self.__instance.C[m])
+                    print("  u calc")
+                    print(_util)
+                    print("  u grb")
+                    print(u)
+                    print("deltas")
+                    print(u - _util)
+
+                
+
+            delta = (obj3.X - _obj3.sum() )
+            
+            print("  obj3 calc            %+15d"% _obj3)
+            print("  obj3 grb             %+15d"% obj3.X)
+            print("  delta:                  %+15.2f" % delta)
+            print("")
+            if abs(delta) > epslon:
+                _grb_rhox = np.array([ model.getVarByName("_x[%d]" % p).X for p in range(nproc)], dtype=np.int64)
+                print("  rho*x calc")
+                print(_rhox)
+                print("  rho*x grb")
+                print(_grb_rhox)
+                print("  rho*x delta")
+                print(_grb_rhox - _rhox)
+                
+                
+            delta = (obj5.X - _obj5.sum() )
+            
+            print("  obj5 calc            %+15d"% _obj5.sum())
+            print("  obj5 grb                %+15.2f"% obj5.X)
+            print("  delta:                  %+15.2f" % delta)
+            print("")
+            if abs(delta) > epslon:
+                print("delta de obj5")
+                
+
             input("Press Enter to continue...")
         
