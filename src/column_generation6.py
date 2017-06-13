@@ -68,14 +68,17 @@ if not os.path.exists(modelfile):
 if not os.path.exists(assignfile):
     sys.exit("File %s not found" % assignfile)
 
-
+print("Load instance")
 inst = Instance(model=modelfile, assign=assignfile)
 
+print("Inst. CG5")
 cg = CG5(inst, epslon=0.5)
 
-
+print("build model")
 # Initialize restricted master problem
 cg.build_model()
+
+print("Loop")
 
 # Initialize vars
 
@@ -88,9 +91,10 @@ best_pi = np.zeros(inst.nproc)
 best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
-beta0 = .90
-betaJ = .97
-beta_min = .90
+beta0 = .75
+betaJ = .99
+beta_min = .75
+beta_step=1
 
 beta = beta0
 
@@ -113,7 +117,7 @@ while continue_cond:
 
     # solve L(pi_st)
     for m in range(inst.nmach):
-        print(" iter %5d  mach %5d => " % (k,m),end='')
+        print(" iter %5d  mach %5d => " % (k,m),end='',flush=True)
         (roadef, w , q,model)= cg.compute_column(m, pi, alpha[m])
 #        if w > - epslon:
 #            print("for break")
@@ -133,7 +137,7 @@ while continue_cond:
     
     if omega > best_omega:
         impr += 1
-        beta = max(beta_min, beta0*(betaJ**impr))
+        beta = max(beta_min, beta0*(betaJ**int(impr/beta_step)))
 
         print("best omega improvement %20.3f -> %20.3f" % (best_omega, omega))
         best_omega = omega

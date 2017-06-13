@@ -31,6 +31,7 @@ class CG5:
         self.__cols = [set([]) for m in range(self.__instance.nmach)]
 
         for m in range(self.__instance.nmach):
+            self.__cols[m].add(tuple(mach_map_assign[m]))
             obj = self.__instance.mach_objective(m, mach_map_assign[m])
             self.__lbd[m].append(
                 self.__mip.addVar(obj=obj,
@@ -110,7 +111,7 @@ class CG5:
 
         d = model.addVars(nres,
                           lb=0,
-                          ub=C-SC,
+                          ub=C,
                           vtype=GRB.INTEGER, 
                           name="d")
 
@@ -302,8 +303,6 @@ class CG5:
         pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
         alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
 
-        # print([[master.getCol(v)] for v in master.getVars() if v.X > .5])
-
         _skip = [ False ]* self.__instance.nmach
 
         for m in range(self.__instance.nmach):
@@ -484,8 +483,6 @@ class CG5:
         pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
         alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
 
-        # print([[master.getCol(v)] for v in master.getVars() if v.X > .5])
-
         _skip = [ False ]* self.__instance.nmach
 
         for m in range(self.__instance.nmach):
@@ -601,6 +598,7 @@ class CG5:
                         if c.getConstr(c3) == self.__p_alloc[p]:
                             c2[p] =1
                 if all(c2 == col):
+                    print(l.getAttr("VarName"))
                     print("col obj (o/n) %d   %d"  %( l.getAttr("Obj"), obj))
             print("column already defined on machine %d" % machine)
             return
@@ -765,18 +763,18 @@ class CG5:
             print("")
 
             if abs(delta) > epslon:
-                u = [ model.getVarByName("u[%d]" % r) for r in range(nres)]
-                d = [ model.getVarByName("d[%d]" % r) for r in range(nres)]
+                u = np.array([ model.getVarByName("u[%d]" % r).X for r in range(nres)],dtype=np.int64)
+                d = np.array([ model.getVarByName("d[%d]" % r).X for r in range(nres)],dtype=np.int64)
                 print("  CALC _util")
                 print(_util)
                 print("  GRB  _util")
-                print(np.array([ u[r].X  for r in range(nres)], dtype = np.int64))
+                print(u)
                 print("   deltas:")
-                print(np.array([ u[r].X  for r in range(nres)], dtype = np.int64) - _util)
+                print(u - _util)
 
                 print("")
 
-                if any(abs(np.array([ u[r].X  for r in range(nres)], dtype = np.int64) - _util)) >0:
+                if any(abs(u - _util)) >0:
                     print("R*x calc")
                     print(_res)
                     print("R*x grb")
@@ -792,11 +790,11 @@ class CG5:
                 print("  CALC _d")
                 print(_d)
                 print("  GRB  _d")
-                print(np.array([ d[r].X  for r in range(nres)], dtype = np.int64))
+                print(d)
                 print("")
                     
                 print("   deltas:")
-                print(np.array([ d[r].X  for r in range(nres)], dtype = np.int64) - _obj1)
+                print(d - _d)
                 print("")
 
 
