@@ -16,6 +16,7 @@ class CG5:
         self.__mip = None
         self.__epslon = epslon
         self.__k = 0
+        self.__mach_mdl = [None for m in range(instance.nmach)]
 
     def __build_model(self):
         if self.__mip: 
@@ -66,15 +67,13 @@ class CG5:
             )
 
         self.__mip.update()
-        
-    def compute_column(self,machine, pi, alpha):
-        return self.__compute_column(machine, pi, alpha)
 
-
-    def __compute_column(self,machine, pi, alpha):
-
+    def __build_column_model(self,machine):
         nres = self.__instance.nres
         nproc = self.__instance.nproc
+
+        pi = np.ones(nproc,dtype=np.int64)
+        alpha=1
 
         R = self.__instance.R
         RHO = self.__instance.RHO
@@ -89,25 +88,19 @@ class CG5:
 
         model = Model("machine_%d" % machine)
         model.ModelSense = GRB.MINIMIZE
-        
+
+        roadef = model.addVar(vtype=GRB.INTEGER, 
+                          name="roadef")
+
         x = model.addVars(nproc, 
                           vtype=GRB.BINARY, 
                           name="x")
-        _x = model.addVars(nproc, 
-                          vtype=GRB.INTEGER, 
-                          name="_x")
-
         
         u = model.addVars(nres,
                           lb=0,
                           ub=C,
                           vtype=GRB.INTEGER, 
                           name="u")
-
-        _r = model.addVars(nproc,nres,
-                          vtype=GRB.INTEGER, 
-                          name="r")
-
 
         d = model.addVars(nres,
                           lb=0,
@@ -142,20 +135,17 @@ class CG5:
         pixp = model.addVar(vtype=GRB.CONTINUOUS, 
                             name="pixp")
 
+        cte = model.addVar(vtype=GRB.BINARY,
+                           obj=1,
+                           lb=1,
+                           ub=1,
+                           name="Constant")
+
         model.update()
 
         model.addConstrs(
             (
-                _r[p,r] == R[p,r]*x[p] 
-                for p in range(nproc)
-                for r in range(nres)
-            ), 
-            name="r"
-        )
-
-        model.addConstrs(
-            (
-                u[r] == quicksum(_r[p,r] for p in range(nproc)) 
+                u[r] == quicksum(R[p,r]*x[p]  for p in range(nproc)) 
                 for r in range(nres)
             ), 
             name="util"
@@ -187,13 +177,227 @@ class CG5:
         )
 
         S =  self.__instance.S
+        for s in range(len(S)):
+            if len(S[s]) >1:
+                model.addConstr(
+                    (
+                        quicksum(x[p] for p in S[s] ) <= 1
+                    ),
+                    name="conflict[%d]" % s
+                )
+
+        _obj1_constr = model.addConstr(
+            obj1 == quicksum(Wlc[r]*d[r]
+                for r in range(nres)
+            ),
+            name="obj1"
+        )
+        _obj2_constr = model.addConstr(
+            obj2 == quicksum(Wbal[r1,r2]*b[r1,r2]
+                for r1 in range(nres)
+                for r2 in range(nres)
+            ),
+            name="obj2"
+        )
+
+        _obj3_constr = model.addConstr(
+            obj3 == WPMC*quicksum(RHO[p]*x[p]
+            for p in [p for p in range(nproc) 
+                      if p not in self.__instance.mach_assign(machine)]
+            ),
+            name="obj3"
+        )
+
+        _obj5_constr = model.addConstr(
+            obj5 == WMMC*quicksum(MU[p]*x[p]
+            for p in [p for p in range(nproc) 
+                      if p not in self.__instance.mach_assign(machine)]
+            ),
+            name="obj5"
+        )
+
+        _pi_constr =  model.addConstr(
+            pixp == quicksum(pi[p]*x[p]
+                    for p in range(nproc)
+            ),
+            name="pixp"
+        )
+
+        _alpha_constr =  model.addConstr(
+            cte == 1, 
+            name="Constant"
+        )
+
+        model.addConstr(
+            roadef == obj1 + obj2 + obj3 + obj5, 
+            name="roadef"
+        )
+        
+        model.setObjective(
+            roadef - pixp - alpha*cte, GRB.MINIMIZE
+        )
+
+        model.Params.OutputFlag=0
+
+        model._x = x
+
+        model._obj1 = obj1
+        model._obj2 = obj2
+        model._obj3 = obj3        
+        model._obj5 = obj5
+
+        model._pi_constr = _pi_constr
+        model._alpha_cte = cte
+
+        self.__mach_mdl[machine] = model
+
+        
+    def compute_column(self,machine, pi, alpha,k):
+        return self.__compute_column(machine, pi, alpha,k)
+
+    def __compute_column2(self,machine, pi, alpha,k):
+        """
+        """
+
+        nproc = self.__instance.nproc
+        if self.__mach_mdl[machine] is None:
+            self.__build_column_model(machine)
+
+        model = self.__mach_mdl[machine]
+
+        #model.write("machine_%d_v%d_pre.lp" % (machine,k) )
+
+        for p in range(nproc):
+            model.chgCoeff(model._pi_constr,model._x[p],-pi[p])
+
+        model._alpha_cte.setAttr("Obj", -alpha)
+        model.update()
+
+        #model.write("machine_%d_v%d_post.lp" % (machine ,k))
+        model.reset()
+        #model.update()
+        model.optimize()
+
+        q = np.array(
+            [ 1 * ( model._x[p].X > .5 ) for p in range(nproc)],
+            dtype=np.int32
+        )
+
+        roadef = int(model._obj1.X +model._obj2.X +model._obj3.X +model._obj5.X)
+
+        return tuple([roadef, model.objVal, q, model])
+
+
+    def __compute_column(self,machine, pi, alpha,k):
+
+        nres = self.__instance.nres
+        nproc = self.__instance.nproc
+
+        R = self.__instance.R
+        RHO = self.__instance.RHO
+        bT = self.__instance.bT
+        C = self.__instance.C[machine]
+        SC = self.__instance.SC[machine]
+        MU = self.__instance.MU[self.__instance.assign(),machine]
+        Wlc = self.__instance.Wlc
+        Wbal = self.__instance.Wbal
+        WPMC = self.__instance.WPMC
+        WMMC = self.__instance.WMMC
+
+        model = Model("machine_%d" % machine)
+        model.ModelSense = GRB.MINIMIZE
+
+        roadef = model.addVar(vtype=GRB.INTEGER, 
+                          name="roadef")
+        
+        x = model.addVars(nproc, 
+                          vtype=GRB.BINARY, 
+                          name="x")
+
+        u = model.addVars(nres,
+                          lb=0,
+                          ub=C,
+                          vtype=GRB.INTEGER, 
+                          name="u")
+
+        d = model.addVars(nres,
+                          lb=0,
+                          ub=C,
+                          vtype=GRB.INTEGER, 
+                          name="d")
+
+        a = model.addVars(nres,
+                          lb=0,
+                          ub=C,
+                          vtype=GRB.INTEGER, 
+                          name="a")
+                          
+        b = model.addVars(nres,nres,
+                          lb=0,
+                          vtype=GRB.INTEGER, 
+                          name="b")
+        
+        obj1 = model.addVar(lb=0,
+                            vtype=GRB.INTEGER, 
+                            name="obj1")
+        obj2 = model.addVar(lb=0,
+                            vtype=GRB.INTEGER, 
+                            name="obj2")
+        obj3 = model.addVar(lb=0,
+                            vtype=GRB.INTEGER, 
+                            name="obj3")
+        obj5 = model.addVar(lb=0,
+                            vtype=GRB.INTEGER, 
+                            name="obj5")
+
+        pixp = model.addVar(vtype=GRB.CONTINUOUS, 
+                            name="pixp")
+
+
+        model.update()
+
         model.addConstrs(
             (
-                quicksum(x[p] for p in S[s] ) <= 1
-                for s in range(len(S)) if len(S[s]) >1
-            ),
-            name="conflict"
+                u[r] == quicksum( R[p,r]*x[p] for p in range(nproc)) 
+                for r in range(nres)
+            ), 
+            name="util"
         )
+        
+        model.addConstrs(
+            (
+                a[r] == C[r] - u[r]  
+                for r in range(nres)
+            ), 
+            name="avail"
+        )
+
+        model.addConstrs(
+            (
+                b[r1,r2] >= bT[r1,r2]*a[r1] - a[r2]
+                for r1 in range(nres)
+                for r2 in range(nres)
+            ),
+            name="balance"
+        )
+                
+        model.addConstrs(
+            (
+                d[r] >= u[r] - SC[r]
+                for r in range(nres)
+            ),
+            name="overload"
+        )
+
+        S =  self.__instance.S
+        for s in range(len(S)):
+            if len(S[s]) >1:
+                model.addConstr(
+                    (
+                        quicksum(x[p] for p in S[s] ) <= 1
+                    ),
+                    name="conflict[%d]" % s
+                )
 
         model.addConstr(
             obj1 == quicksum(Wlc[r]*d[r]
@@ -209,16 +413,8 @@ class CG5:
             name="obj2"
         )
 
-
-        model.addConstrs(
-            (
-                _x[p] == RHO[p]*x[p]
-                for p in range(nproc)
-            )
-        )
-        
         model.addConstr(
-            obj3 == WPMC*quicksum(_x[p]
+            obj3 == WPMC*quicksum(  RHO[p]*x[p]
             for p in [p for p in range(nproc) 
                       if p not in self.__instance.mach_assign(machine)]
             ),
@@ -239,10 +435,17 @@ class CG5:
             ),
             name="pixp"
         )
+
+        model.addConstr(
+            roadef == obj1 + obj2 + obj3 + obj5, 
+            name="roadef"
+        )
+
         model.setObjective(
-            obj1 + obj2 + obj3 + obj5 - pixp - alpha, GRB.MINIMIZE
+            roadef - pixp - alpha, GRB.MINIMIZE
         )
         model.Params.OutputFlag=0
+        #model.write("machine_%d_v%d.lp" % (machine,k))
         model.optimize()
 
         q = np.array(
@@ -250,7 +453,7 @@ class CG5:
             dtype=np.int32
         )
 
-        return tuple([int(obj1.X + obj2.X + obj3.X + obj5.X), model.objVal, q, model])
+        return tuple([int(roadef.X), model.objVal, q, model])
 
     def __relax(self):
         self.__mip.update()
@@ -870,5 +1073,8 @@ class CG5:
                 print("delta de obj5")
                 
 
-            input("Press Enter to continue...")
+#            model.write("modelo_mismatch.lp")
+#            model.write("modelo_mismatch.mps")
+#            input("Press Enter to continue...")
+#           raise Exception("Mismatch")
         

@@ -92,7 +92,7 @@ best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
 beta0 = .75
-betaJ = .99
+betaJ = .999
 beta_min = .75
 beta_step=1
 
@@ -105,6 +105,7 @@ while continue_cond:
     (z_rm, pi_rm, alpha_rm) = cg.solve_relax()
 
     if np.isnan(z_rm):
+        print("relax unsolv")
         break
 
     # Compute pi_stabilized
@@ -118,7 +119,7 @@ while continue_cond:
     # solve L(pi_st)
     for m in range(inst.nmach):
         print(" iter %5d  mach %5d => " % (k,m),end='',flush=True)
-        (roadef, w , q,model)= cg.compute_column(m, pi, alpha[m])
+        (roadef, w , q,model)= cg.compute_column(m, pi, alpha[m],k)
 #        if w > - epslon:
 #            print("for break")
 ##            break
@@ -150,7 +151,7 @@ while continue_cond:
         break
         
     k+=1
-#    if k>= 250:
+#    if k>= 400:
 #        break
 
 (obj, X, alloc) = cg.solve_mip()
