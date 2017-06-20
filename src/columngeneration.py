@@ -78,6 +78,7 @@ class CG5:
         R = self.__instance.R
         RHO = self.__instance.RHO
         bT = self.__instance.bT
+        T = self.__instance.T
         C = self.__instance.C[machine]
         SC = self.__instance.SC[machine]
         MU = self.__instance.MU[self.__instance.assign(),machine]
@@ -101,6 +102,12 @@ class CG5:
                           ub=C,
                           vtype=GRB.INTEGER, 
                           name="u")
+
+        ut = model.addVars(nres,
+                          lb=0,
+                          ub=C,
+                          vtype=GRB.INTEGER, 
+                          name="ut")
 
         d = model.addVars(nres,
                           lb=0,
@@ -150,6 +157,29 @@ class CG5:
             ), 
             name="util"
         )
+
+        model.addConstrs(
+            (
+                ut[r] == T[r] * quicksum(
+                    R[p,r]*(1-x[p])  
+                    for p in range(nproc)
+                    if p in self.__instance.mach_assign(machine)
+                ) 
+                for r in range(nres)
+            ), 
+            name="util_transient"
+        )
+
+        
+        model.addConstrs(
+            (
+                u[r] + ut[r] <= C[r] 
+                for r in range(nres)
+            ), 
+            name="capacity"
+        )
+
+
         
         model.addConstrs(
             (
@@ -253,7 +283,7 @@ class CG5:
 
         
     def compute_column(self,machine, pi, alpha,k):
-        return self.__compute_column(machine, pi, alpha,k)
+        return self.__compute_column2(machine, pi, alpha,k)
 
     def __compute_column2(self,machine, pi, alpha,k):
         """
@@ -490,7 +520,7 @@ class CG5:
         _pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
         _alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
 
-        return tuple([_obj, _pi, _alpha])
+        return tuple([_obj, _pi, _alpha, master])
         
     def __model_pre_optimize(self):
         if not self.__mip:
@@ -835,7 +865,30 @@ class CG5:
         if obj is None:
             obj = self.__instance.mach_objective(machine,col)
 
-        starting_col = cg.__instance()
+        cols = [[] for m in range(self.__instance.nmach)]
+        cols[machine].append(np.copy(self.__instance.mach_map_assign(machine)))
+
+        delta_col = col - cols[machine][0]
+
+        p_plus  = delta_col>0
+        p_minus = delta_col<0
+
+        print("+ %d" % p_plus.sum())
+
+        from itertools import product
+
+        fb = np.array(list(product([0,1], repeat=len(p_minus))),dtype=np.bool)
+        print(fb)
+
+        for m in range(self.__instance.nmach):
+            if m == machine: continue
+            cols[m].append(np.copy(self.__instance.mach_map_assign(m)))
+            cols[m][0][p_plus] = 0
+            
+
+        print(cols)
+        
+
 
     def solve_lr(self,w=[]):
         (lr, p_constr, m_constr) = self.__relax()
@@ -981,7 +1034,7 @@ class CG5:
                     print("R*x calc")
                     print(_res)
                     print("R*x grb")
-                    _r = np.array([[model.getVarByName("r[%d,%d]" %(p,r)).X for r in range(nres)] for p in range(nproc)],dtype=np.int64)
+                    _r = np.array([[R[p,r] * model.getVarByName("x[%d]" %(p)).X for r in range(nres)] for p in range(nproc)],dtype=np.int64)
                     print(_r)
                     print("deltas:")
                     print(_res - _r)

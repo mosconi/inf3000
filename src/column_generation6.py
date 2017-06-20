@@ -91,18 +91,20 @@ best_pi = np.zeros(inst.nproc)
 best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
-beta0 = .75
-betaJ = .999
-beta_min = .75
-beta_step=1
+beta0 = .5
+betaJ = .95
+beta_min = .5
+beta_step=10
 
 beta = beta0
 
 
 
 while continue_cond:
+    start = time()
     # solve RDWM 
-    (z_rm, pi_rm, alpha_rm) = cg.solve_relax()
+    print("   iter %5d          obj:  "% k ,end='',flush=True)
+    (z_rm, pi_rm, alpha_rm, rlx ) = cg.solve_relax()
 
     if np.isnan(z_rm):
         print("relax unsolv")
@@ -114,28 +116,23 @@ while continue_cond:
 
     # omega é a soma dos custos reduzidos dos sub problemas
     omega = 0
-    print(" iter %5d  obj: %+20.3f                                                              N: %3d, beta: %0.3f)" %(k, z_rm, impr, beta) )
+    print("%+20.3f                                in %10.3fs N: %3d, beta: %0.3f)" %( z_rm, rlx.Runtime, impr, beta) )
 
     # solve L(pi_st)
     for m in range(inst.nmach):
-        print(" iter %5d  mach %5d => " % (k,m),end='',flush=True)
+        print("   iter %5d  mach %5d => " % (k,m),end='',flush=True)
         (roadef, w , q,model)= cg.compute_column(m, pi, alpha[m],k)
 #        if w > - epslon:
 #            print("for break")
 ##            break
-        print("%20.3f (roadef: %20.3f)                      N: %3d, beta: %0.3f)" % (w, roadef, impr, beta))
+        print("%20.3f (roadef: %20.3f) in %10.3fs N: %3d, beta: %0.3f)" % (w, roadef, model.Runtime, impr, beta))
         cg.validate_column(q,m,w,roadef,pi,alpha[m],epslon,model)
         omega += w
-        if len(q) < 100:
-            print("add col", q)
-        cg.mip_add_col(obj=roadef, col =q, machine=m)
+        if w < -epslon:
+            cg.mip_add_col(obj=roadef, col =q, machine=m)
 
-        #cols = cg.generate_companion_columns(machine=m,col=q,obj=roadef
-        #for (_m,_obj,_col) in cols
+    print("omega: %20.3f (%20.3f)  delta: %20.3f  in %10.3fs N: %3d, beta: %0.3f)" % (omega, best_omega, omega - best_omega, time() - start , impr, beta))
 
-    print("omega: %20.3f (%20.3f) sum: %20.3f (%20.3f) N: %3d, beta: %0.3f)" % (omega, best_omega, z_rm + omega,z_rm + best_omega, impr, beta))
-
-    
     if omega > best_omega:
         impr += 1
         beta = max(beta_min, beta0*(betaJ**int(impr/beta_step)))
@@ -146,9 +143,11 @@ while continue_cond:
         best_alpha = alpha
         #input("Press Enter to continue...")
 
-    if  best_omega >- epslon:
+    if  best_omega > -epslon:
         contine_cond = False
         break
+
+    
         
     k+=1
 #    if k>= 400:
