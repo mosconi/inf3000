@@ -11,7 +11,7 @@ from gurobipy import *
 from columngeneration import CG5
 
 rows, columns = os.popen('stty size', 'r').read().split()
-np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+20.3f" % x,'int': lambda x: "%+20d" % x, })
+np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+17.3f" % x,'int': lambda x: "%+20d" % x, })
 
 def usage():
     print("%s [-n name] [-o outputfile ] [-s] [-q] -m modelfile -a assignfile\n" % sys.argv[0])
@@ -91,24 +91,27 @@ best_pi = np.zeros(inst.nproc)
 best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
-beta0 = .5
+beta0 = .75
 betaJ = .95
-beta_min = .5
+beta_min = .75
 beta_step=10
 
 beta = beta0
 
-
+first_zrm = None
 
 while continue_cond:
     start = time()
     # solve RDWM 
-    print("   iter %5d          obj:  "% k ,end='',flush=True)
+    print("   iter %5d          obj:   "% k ,end='',flush=True)
     (z_rm, pi_rm, alpha_rm, rlx ) = cg.solve_relax()
 
     if np.isnan(z_rm):
         print("relax unsolv")
         break
+
+    if first_zrm is None:
+        first_zrm = z_rm
 
     # Compute pi_stabilized
     pi = beta * best_pi + ( 1 - beta ) * pi_rm
@@ -116,7 +119,7 @@ while continue_cond:
 
     # omega é a soma dos custos reduzidos dos sub problemas
     omega = 0
-    print("%+20.3f                                in %10.3fs N: %3d, beta: %0.3f)" %( z_rm, rlx.Runtime, impr, beta) )
+    print("%+17.3f (delta:         %10.3f) in %10.3fs N: %3d, beta: %0.3f)" %( z_rm,  first_zrm - z_rm ,  rlx.Runtime, impr, beta) )
 
     # solve L(pi_st)
     for m in range(inst.nmach):
@@ -125,19 +128,19 @@ while continue_cond:
 #        if w > - epslon:
 #            print("for break")
 ##            break
-        print("%20.3f (roadef: %20.3f) in %10.3fs N: %3d, beta: %0.3f)" % (w, roadef, model.Runtime, impr, beta))
+        print("%17.3f (roadef: %17.3f) in %10.3fs N: %3d, beta: %0.3f)" % (w, roadef, model.Runtime, impr, beta))
         cg.validate_column(q,m,w,roadef,pi,alpha[m],epslon,model)
         omega += w
         if w < -epslon:
             cg.mip_add_col(obj=roadef, col =q, machine=m)
 
-    print("omega: %20.3f (%20.3f)  delta: %20.3f  in %10.3fs N: %3d, beta: %0.3f)" % (omega, best_omega, omega - best_omega, time() - start , impr, beta))
+    print("omega: %17.3f   (%17.3f)  delta:  %17.3f  in %10.3fs N: %3d, beta: %0.3f)" % (omega, best_omega, omega - best_omega, time() - start , impr, beta))
 
     if omega > best_omega:
         impr += 1
         beta = max(beta_min, beta0*(betaJ**int(impr/beta_step)))
 
-        print("best omega improvement %20.3f -> %20.3f" % (best_omega, omega))
+        print("best omega improvement %17.3f -> %17.3f" % (best_omega, omega))
         best_omega = omega
         best_pi = pi
         best_alpha = alpha
