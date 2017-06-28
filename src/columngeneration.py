@@ -2,6 +2,19 @@
 import numpy as np
 from gurobipy import *
 
+_progress_clock = [ '\b|', '\b/' , '\b-', '\b\\']
+
+def _print_backspace():
+    print('\b',end='',flush=True)
+    
+def _print_prog_clock(cnt):
+    print(_progress_clock[cnt%len(_progress_clock)],end='',flush=True)
+
+def _cb(model,where):
+    if where == GRB.Callback.SIMPLEX:
+        itcnt = model.cbGet(GRB.Callback.SPX_ITRCNT)
+        _print_prog_clock(int(itcnt))
+
 class CG5:
     def __init__(self,
                  instance=None,
@@ -17,7 +30,8 @@ class CG5:
         self.__epslon = epslon
         self.__k = 0
         self.__mach_mdl = [None for m in range(instance.nmach)]
-
+                
+        
     def __build_model(self):
         if self.__mip: 
             return
@@ -507,7 +521,8 @@ class CG5:
         if k is not None:
             master.write("relax_%d.lp" % k)
         master.Params.OutputFlag = 0
-        master.optimize()
+        master.optimize(_cb)
+        _print_backspace()
 
         s = master.Status
         if s == GRB.Status.INF_OR_UNBD or \
@@ -776,10 +791,11 @@ class CG5:
             self.__rebox()
             
 
-    def solve_mip(self):
-#        self.__mip.write("cg5.lp")
+    def solve_mip(self,file=None):
+        if file is not None:
+            self.__mip.write(file)
         self.__mip.Params.OutputFlag=0
-        self.__mip.optimize()
+        self.__mip.optimize(_cb)
 
         _obj = self.__mip.ObjVal
         _X = None
