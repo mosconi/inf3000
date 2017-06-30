@@ -91,9 +91,9 @@ best_pi = np.zeros(inst.nproc)
 best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
-beta0 = .75
-betaJ = .95
-beta_min = .75
+beta0 = .90
+betaJ = .99
+beta_min = 0
 beta_step=10
 
 beta = beta0
@@ -149,7 +149,7 @@ while continue_cond:
         best_alpha = alpha
         #input("Press Enter to continue...")
     beta = max(beta_min, beta0*(betaJ**max(0,impr - inst.nmach)))
-
+    if impr > inst.nproc: beta = 0
         
     if  best_omega > -epslon:
         contine_cond = False
