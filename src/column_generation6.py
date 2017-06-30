@@ -87,11 +87,12 @@ impr=0
 
 continue_cond = True
 
+best_zrm = + np.inf
 best_pi = np.zeros(inst.nproc)
 best_alpha = np.zeros(inst.nmach)
 best_omega = - np.inf
 
-beta0 = .90
+beta0 = .75
 betaJ = .99
 beta_min = 0
 beta_step=10
@@ -121,6 +122,9 @@ while continue_cond:
     omega = 0
     print("%+17.3f (delta:  %17.3f O) in %10.3fs N: %3d, beta: %0.3f)" %( z_rm,  first_zrm - z_rm ,  rlx.Runtime, impr, beta) )
 
+    if best_zrm > z_rm:
+        best_zrm = z_rm 
+
     # solve L(pi_st)
     __col_added = False
     for m in range(inst.nmach):
@@ -143,14 +147,21 @@ while continue_cond:
     if omega > best_omega:
         impr += 1
         #beta = max(beta_min, beta0*(betaJ**max(0,impr - inst.nproc, k - inst.nproc)))
-        print("     best omega improvement %17.3f -> %17.3f" % (best_omega, omega))
+        print("     best omega improvement %17.3f -> %17.3f (%17.3f) %0.10f" % (best_omega, omega, omega/best_omega , beta ))
+        #if np.isinf(best_omega):
+        #    best_omega = omega
+        #beta = beta * (omega/best_omega)
         best_omega = omega
         best_pi = pi
         best_alpha = alpha
         #input("Press Enter to continue...")
-    beta = max(beta_min, beta0*(betaJ**max(0,impr - inst.nmach)))
-    if impr > inst.nproc: beta = 0
-        
+    #beta = max(beta_min, beta0*(betaJ**max(0,impr - inst.nmach)))
+    #if impr > inst.nproc: beta = 0
+
+    beta = max( beta_min, beta0 * (1 - (impr*1.0)/inst.nproc))
+
+    #beta = beta0 * ((z_rm - omega)/(first_zrm - omega))
+
     if  best_omega > -epslon:
         contine_cond = False
         break
