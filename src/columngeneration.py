@@ -47,9 +47,9 @@ class CG5:
         else:
             self.__lp.Params.OutputFlag = 0
 
-        self.__lp.Params.MIPGap = self.__epslon
         self.__lp.Params.ScaleFlag = 0
         self.__lp.Params.Quad = 1
+        self.__lp.Params.NumericFocus = 3
 
         self.__lp.ModelSense = GRB.MINIMIZE
 
@@ -115,6 +115,7 @@ class CG5:
 
         self.__mip.Params.ScaleFlag = 0
         self.__mip.Params.Quad = 1
+        self.__mip.Params.NumericFocus = 3 
         
         # set up MIP vars
         mach_map_assign = self.__instance.map_assign()
@@ -187,10 +188,9 @@ class CG5:
         else:
             model.Params.OutputFlag = 0
 
-        model.Params.MIPGap = self.__epslon
-
         model.Params.Quad = 1
         model.Params.ScaleFlag = 0 
+        model.Params.NumericFocus = 3 
             
         model.ModelSense = GRB.MINIMIZE
 
@@ -443,10 +443,9 @@ class CG5:
         else:
             model.Params.OutputFlag = 0
 
-        model.Params.MIPGap = self.__epslon        
         model.Params.Quad = 1
         model.Params.ScaleFlag = 0 
-        model.Params.NumericFocus = 2
+        model.Params.NumericFocus = 3
         
         model.ModelSense = GRB.MINIMIZE
 
