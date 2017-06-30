@@ -18,7 +18,7 @@ def usage():
 
 modelfile=None
 assignfile=None
-name="roadef"
+name=None
 outputfile=None
 savemodel=False
 verbose=True
@@ -72,11 +72,11 @@ print("Load instance")
 inst = Instance(model=modelfile, assign=assignfile)
 
 print("Inst. CG5")
-cg = CG5(inst, epslon=0.5)
+cg = CG5(instance=inst, epslon=epslon,name=name)
 
 print("build model")
 # Initialize restricted master problem
-cg.build_model()
+cg.build_lp_model()
 
 print("Loop")
 
@@ -103,7 +103,7 @@ first_zrm = None
 while continue_cond:
     start = time()
     # solve RDWM 
-    print("   iter %5d          obj:   "% k ,end='',flush=True)
+    print(" iter %5d         obj:   "% k ,end='',flush=True)
     (z_rm, pi_rm, alpha_rm, rlx ) = cg.solve_relax()
 
     if np.isnan(z_rm):
@@ -119,33 +119,36 @@ while continue_cond:
 
     # omega é a soma dos custos reduzidos dos sub problemas
     omega = 0
-    print("%+17.3f (delta:         %10.3f) in %10.3fs N: %3d, beta: %0.3f)" %( z_rm,  first_zrm - z_rm ,  rlx.Runtime, impr, beta) )
+    print("%+17.3f (delta:  %17.3f O) in %10.3fs N: %3d, beta: %0.3f)" %( z_rm,  first_zrm - z_rm ,  rlx.Runtime, impr, beta) )
 
     # solve L(pi_st)
+    __col_added = False
     for m in range(inst.nmach):
-        print("   iter %5d  mach %5d => " % (k,m),end='',flush=True)
+        print(" iter %5d  mach %5d => " % (k,m),end='',flush=True)
         (roadef, w , q,model)= cg.compute_column(m, pi, alpha[m],k)
 #        if w > - epslon:
 #            print("for break")
 ##            break
-        print("%17.3f (roadef: %17.3f) in %10.3fs N: %3d, beta: %0.3f)" % (w, roadef, model.Runtime, impr, beta))
         cg.validate_column(q,m,w,roadef,pi,alpha[m],epslon,model)
         omega += w
-        if w < -epslon:
-            cg.mip_add_col(obj=roadef, col =q, machine=m)
+#        if w < -epslon or True:
+#            __col_added = True
+        s=cg.lp_add_col(obj=roadef, col =q, machine=m)
+        print("%17.3f (roadef: %17.3f %s) in %10.3fs N: %3d, beta: %0.3f)" % (w, roadef,s, model.Runtime, impr, beta))
 
-    print("omega: %17.3f   (%17.3f)  delta:  %17.3f  in %10.3fs N: %3d, beta: %0.3f)" % (omega, best_omega, omega - best_omega, time() - start , impr, beta))
+    print("  omega: %17.3f (%17.3f)  delta: %17.3f  in %10.3fs N: %3d, beta: %0.3f)" % (omega, best_omega, omega - best_omega, time() - start , impr, beta))
 
     if omega > best_omega:
         impr += 1
-        beta = max(beta_min, beta0*(betaJ**int(impr/beta_step)))
-
-        print("best omega improvement %17.3f -> %17.3f" % (best_omega, omega))
+        #beta = max(beta_min, beta0*(betaJ**max(0,impr - inst.nproc, k - inst.nproc)))
+        print("     best omega improvement %17.3f -> %17.3f" % (best_omega, omega))
         best_omega = omega
         best_pi = pi
         best_alpha = alpha
         #input("Press Enter to continue...")
+    beta = max(beta_min, beta0*(betaJ**max(0,impr - inst.nmach)))
 
+        
     if  best_omega > -epslon:
         contine_cond = False
         break
@@ -153,9 +156,9 @@ while continue_cond:
     
         
     k+=1
-#    if k>= 400:
-#        break
+    if k>= 4 and False:
+        break
 
-(obj, X, alloc) = cg.solve_mip()
+(obj, X, alloc) = cg.solve_lp2mip()
 
 print(X)

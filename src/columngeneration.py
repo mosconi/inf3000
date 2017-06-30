@@ -5,7 +5,7 @@ from gurobipy import *
 _progress_clock = [ '\b|', '\b/' , '\b-', '\b\\']
 
 def _print_backspace():
-    print('\b',end='',flush=True)
+    print('\b',end='')
     
 def _print_prog_clock(cnt):
     print(_progress_clock[cnt%len(_progress_clock)],end='',flush=True)
@@ -17,6 +17,7 @@ def _cb(model,where):
 
 class CG5:
     def __init__(self,
+                 name=None,
                  instance=None,
                  historysize=10,
                  epslon=0.1
@@ -27,18 +28,90 @@ class CG5:
         self.__instance = instance
         self._hsz = historysize
         self.__mip = None
+        self.__lp = None
         self.__epslon = epslon
         self.__k = 0
         self.__mach_mdl = [None for m in range(instance.nmach)]
+        self.__name=name
                 
+    def __build_lp_model(self):
+        if self.__lp:
+            return
+
+        self.__lp = Model("lp")
+        
+        if self.__name:
+            self.__lp.Params.LogToConsole = 0
+            self.__lp.Params.OutputFlag = 1
+            self.__lp.Params.LogFile="lp_%s.log" % self.__name
+        else:
+            self.__lp.Params.OutputFlag = 0
+
+        self.__lp.Params.MIPGap = self.__epslon
+
+        self.__lp.ModelSense = GRB.MINIMIZE
+
+        # set up LP vars
+        mach_map_assign = self.__instance.map_assign()
+        self.__lp_lbd = [[] for m in range(self.__instance.nmach)]
+        self.__lp_q = [[] for m in range(self.__instance.nmach)]
+        self.__lp_cols = [set([]) for m in range(self.__instance.nmach)]
+
+        for m in range(self.__instance.nmach):
+            self.__lp_cols[m].add(tuple(mach_map_assign[m]))
+            obj = self.__instance.mach_objective(m, mach_map_assign[m])
+            self.__lp_lbd[m].append(
+                self.__lp.addVar(obj=obj,
+                                 lb=0,
+                                 ub=1,
+                                 vtype=GRB.CONTINUOUS,
+                                 name="lbd_%d[0]"%m
+                )
+            )
+        self.__lp.update()
+
+        # set up LP constraints
+
+        ## all process must be assigned
+        self.__lp_p_alloc={}
+        for p in range(self.__instance.nproc):
+            self.__lp_p_alloc[p] = self.__lp.addConstr(
+                quicksum(
+                    self.__lp_lbd[m][0]*
+                    mach_map_assign[m][p] 
+                    for m in range(self.__instance.nmach)
+                ) == 1,
+                name="p_alloc[%d]"%p
+            )
+
+        ## all machine must have an allocation
+        self.__lp_m_assign={}
+
+        for m in range(self.__instance.nmach):
+            self.__lp_m_assign[m]=self.__lp.addConstr(
+                self.__lp_lbd[m][0] == 1,
+                name="m_assign[%d]"%m
+            )
+
+        self.__lp.update()
+
         
     def __build_model(self):
         if self.__mip: 
             return
 
         self.__mip = Model("mip")
+        
         self.__mip.ModelSense = GRB.MINIMIZE
 
+        if self.__name:
+            self.__mip.Params.LogToConsole = 0
+            self.__mip.Params.OutputFlag = 1
+            self.__mip.Params.LogFile="mip_%s.log" % self.__name
+        else:
+            self.__mip.Params.OutputFlag = 0
+
+        
         # set up MIP vars
         mach_map_assign = self.__instance.map_assign()
         self.__lbd = [[] for m in range(self.__instance.nmach)]
@@ -102,6 +175,16 @@ class CG5:
         WMMC = self.__instance.WMMC
 
         model = Model("machine_%d" % machine)
+
+        if self.__name:
+            model.Params.LogToConsole = 0
+            model.Params.OutputFlag = 1
+            model.Params.LogFile="mach_%s_%d.log" % (self.__name,machine)
+        else:
+            model.Params.OutputFlag = 0
+
+        model.Params.MIPGap = self.__epslon
+            
         model.ModelSense = GRB.MINIMIZE
 
         roadef = model.addVar(vtype=GRB.INTEGER, 
@@ -281,8 +364,6 @@ class CG5:
             roadef - pixp - alpha*cte, GRB.MINIMIZE
         )
 
-        model.Params.OutputFlag=0
-
         model._x = x
 
         model._obj1 = obj1
@@ -309,7 +390,6 @@ class CG5:
 
         model = self.__mach_mdl[machine]
 
-        #model.write("machine_%d_v%d_pre.lp" % (machine,k) )
 
         for p in range(nproc):
             model.chgCoeff(model._pi_constr,model._x[p],-pi[p])
@@ -317,10 +397,10 @@ class CG5:
         model._alpha_cte.setAttr("Obj", -alpha)
         model.update()
 
-        #model.write("machine_%d_v%d_post.lp" % (machine ,k))
         model.reset()
         #model.update()
-        model.optimize()
+        model.optimize(_cb)
+        _print_backspace()
 
         q = np.array(
             [ 1 * ( model._x[p].X > .5 ) for p in range(nproc)],
@@ -349,6 +429,15 @@ class CG5:
         WMMC = self.__instance.WMMC
 
         model = Model("machine_%d" % machine)
+        if self.__name:
+            model.Params.LogToConsole = 0
+            model.Params.OutputFlag = 1
+            model.Params.LogFile="mach_%s_%d.log" % (self.__name,machine)
+        else:
+            model.Params.OutputFlag = 0
+
+        model.Params.MIPGap = self.__epslon        
+        
         model.ModelSense = GRB.MINIMIZE
 
         roadef = model.addVar(vtype=GRB.INTEGER, 
@@ -488,7 +577,6 @@ class CG5:
         model.setObjective(
             roadef - pixp - alpha, GRB.MINIMIZE
         )
-        model.Params.OutputFlag=0
         #model.write("machine_%d_v%d.lp" % (machine,k))
         model.optimize()
 
@@ -499,28 +587,45 @@ class CG5:
 
         return tuple([int(roadef.X), model.objVal, q, model])
 
-    def __relax(self):
-        self.__mip.update()
+    def __dump_relax(self):
+        self.__lp.update()
 
-        master = self.__mip.relax()
+        master = self.__lp
+
+        
+    
+    def __relax(self):
+        master = None
+        if self.__lp:
+            self.__lp.update()
+            master = self.__lp
+        elif self.__mip:
+            self.__mip.update()
+            master = self.__mip.relax()
+        else:
+            raise Exception("build_lp_model or build_model must be called")
+
+
         p_constr = [master.getConstrByName("p_alloc[%d]" % p) for p in range(self.__instance.nproc)] 
         m_constr = [master.getConstrByName("m_assign[%d]" % m) for m in range(self.__instance.nmach)] 
 
         return tuple([master, p_constr, m_constr])
 
 
+    def build_lp_model(self):
+        self.__build_lp_model()
+
+    
     def build_model(self):
         self.__build_model()
 
     def solve_relax(self,k=None):
-        if not self.__mip:
-            self.__build_model()
-
+        
         (master, p_constr, m_constr) = self.__relax()
 
         if k is not None:
             master.write("relax_%d.lp" % k)
-        master.Params.OutputFlag = 0
+
         master.optimize(_cb)
         _print_backspace()
 
@@ -531,7 +636,7 @@ class CG5:
            False:
             return tuple([np.nan, [np.nan] , [np.nan] ])
         _obj = master.objVal
-        
+
         _pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
         _alpha = np.array([c.Pi for c in m_constr], dtype=np.float64)
 
@@ -543,7 +648,6 @@ class CG5:
 
         (master, p_constr, m_constr) = self.__relax()
 
-        master.Params.OutputFlag = 0
         master.optimize()
 
         self._last_obj = master.objVal
@@ -725,7 +829,6 @@ class CG5:
         
 
         master.update()
-        master.Params.OutputFlag=0
         master.optimize()
         
         pi = np.array([c.Pi for c in p_constr], dtype=np.float64)
@@ -791,11 +894,44 @@ class CG5:
             self.__rebox()
             
 
+    def solve_lp2mip(self,file=None):
+
+        self.__mip = self.__lp
+        
+        for v in  self.__mip.getVars():
+            v.vtype = GRB.BINARY
+
+        for m in range(self.__instance.nmach):
+            self.__lp_lbd[m][0].Start=1
+            
+        if file is not None:
+            self.__mip.write(file)
+
+        self.__mip.optimize(_cb)
+        _print_backspace()
+
+        _obj = self.__mip.ObjVal
+        _X = None
+        _alloc = None
+        for m in range(self.__instance.nmach):
+            _lbd = [ _a for _a in self.__lp_lbd[m] if _a.X > .5][0]
+            print(_lbd.VarName)
+            _col = self.__mip.getCol(_lbd)
+            for c_idx in range(len(self.__lp_p_alloc)):
+                for c_col in range(_col.size()):
+                    if self.__lp_p_alloc[c_idx] == _col.getConstr(c_col):
+                        print(c_idx, end=' ', flush=True)
+            print()
+        
+        return tuple([_obj, _X, _alloc])
+            
+
     def solve_mip(self,file=None):
         if file is not None:
             self.__mip.write(file)
-        self.__mip.Params.OutputFlag=0
+
         self.__mip.optimize(_cb)
+        _print_backspace()
 
         _obj = self.__mip.ObjVal
         _X = None
@@ -826,7 +962,52 @@ class CG5:
                     if self.__p_alloc[c_idx] == _col.getConstr(c_col):
                         print(c_idx, end=' ', flush=True)
             print()
-            
+
+    def lp_add_col(self, machine=None, col=None, obj=None):
+        if machine is None:
+            raise Exception("machine not defined")
+
+        if col is None:
+            raise Exception("column not defined")
+
+        if obj is None:
+            raise Exception("objective component not defined")
+
+        if tuple(col) in self.__lp_cols[machine]:
+            return 'E'
+            for l in self.__lp_lbd[machine]:
+                c2 = np.zeros((self.__instance.nproc),dtype=np.int64)
+                c = self.__lp.getCol(l)
+                for c3 in range(c.size()):
+                    for p in range(self.__instance.nproc):
+                        if c.getConstr(c3) == self.__lp_p_alloc[p]:
+                            c2[p] =1
+                if all(c2 == col):
+                    print(l.getAttr("VarName"))
+                    print("col obj (o/n) %d   %d"  %( l.getAttr("Obj"), obj))
+            print("column already defined on machine %d" % machine)
+            return
+
+
+        self.__lp_cols[machine].add(tuple(col))
+
+        _col = Column()
+        _col.addTerms(
+            col,
+            [self.__lp_p_alloc[p] for p in range(self.__instance.nproc)]
+        )
+        _col.addTerms([1],[self.__lp_m_assign[machine]])
+                         
+        self.__lp_lbd[machine].append(
+            self.__lp.addVar(obj=obj,
+                             vtype=GRB.CONTINUOUS,
+                             lb=0, ub=1,
+                             column=_col,
+                             name="lbd_%d[%d]" % (machine, len(self.__lp_lbd[machine]))
+            )
+        )
+        return 'A'
+                    
     def mip_add_col(self, machine=None, col=None, obj=None):
 
         if machine is None:
@@ -892,7 +1073,7 @@ class CG5:
         print("+ %d" % p_plus.sum())
 
         from itertools import product
-
+        
         fb = np.array(list(product([0,1], repeat=len(p_minus))),dtype=np.bool)
         print(fb)
 
@@ -910,7 +1091,6 @@ class CG5:
         (lr, p_constr, m_constr) = self.__relax()
         mu=lr.addVars(len(w),obj=w,name="mu")
 
-        lr.Params.OutputFlag = 0
         lr.optimize()
         
         _obj = lr.objVal
