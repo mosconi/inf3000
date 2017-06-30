@@ -31,3 +31,6 @@ TAGS
 *.kdev4
 .kdev4
 
+
+# Python Temp
+*.pyc
