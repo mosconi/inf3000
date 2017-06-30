@@ -135,8 +135,10 @@ while continue_cond:
 #            __col_added = True
         s=cg.lp_add_col(obj=roadef, col =q, machine=m)
         print("%17.3f (roadef: %17.3f %s) in %10.3fs N: %3d, beta: %0.3f)" % (w, roadef,s, model.Runtime, impr, beta))
+        if 'A' == s:
+            __col_added = True
 
-    print("  omega: %17.3f (%17.3f)  delta: %17.3f  in %10.3fs N: %3d, beta: %0.3f)" % (omega, best_omega, omega - best_omega, time() - start , impr, beta))
+    print(" omega: %17.3f (%17.3f) delta: %17.3f  in %10.3fs N: %3d, beta: %0.3f)" % (omega, best_omega, omega - best_omega, time() - start , impr, beta))
 
     if omega > best_omega:
         impr += 1
@@ -150,6 +152,10 @@ while continue_cond:
 
         
     if  best_omega > -epslon:
+        contine_cond = False
+        break
+    if  not __col_added:
+        print("  no cols added")
         contine_cond = False
         break
 
