@@ -1,0 +1,17 @@
+* Comparações
+** MIP
+*** Formulação inicial
+*** Formulação t=xx
+*** Formulação t=xx e z
+*** Formulação inicial Linear
+*** Formulação t=xx linear
+*** Formulação t=xx e z linear
+
+** CG
+*** Métodos de estabilizção
+**** Livre
+**** Constante
+**** Linear
+**** Razão de RC
+**** Razão de OBJ+RC
+**** Exponencial
