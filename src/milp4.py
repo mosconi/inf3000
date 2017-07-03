@@ -369,9 +369,11 @@ if verbose: print(solution)
 
 if verbose: print([ "proc %d: %d -> %d" %(n,k[0],k[1])  for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]], sep="\n")
 
-if verbose:
-    for m in range(nmach):
-        print([p for p in range(nproc) if solution[p] == m])
+if verbose: print(len([ "proc %d: %d -> %d" %(n,k[0],k[1])  for n,k in enumerate(zip(assign,solution)) if k[0]!=k[1]]))
+
+#if verbose:
+#    for m in range(nmach):
+#        print([p for p in range(nproc) if solution[p] == m])
 
 if outputfile:
     if verbose: print(">>> salvando resposta em %s" % outputfile)
