@@ -1,4 +1,14 @@
+import argparse
+
+import roadef
 import numpy as np
+
+
+parser = argparse.ArgumentParser(add_help=False,
+                                 description="Arguments for instance data")
+
+args = parser.parse_known_args()[0]
+
 
 def _maptoint(m):
     a = 0
@@ -7,19 +17,25 @@ def _maptoint(m):
     return a
 
 class Instance:
-    def __new__(cls, model=None, assign=None,inline=False):
-        if not model:
+    def __new__(cls, model=None, assign=None,inline=False,opened=False):
+        print()
+        if not model and not roadef.args.instance_filename:
             raise ValueError("Missing model")
-        if not assign:
+        if not assign and not roadef.args.original_solution_filename:
             raise ValueError("Missing initial assigment")
         return super(Instance,cls).__new__(cls)
     
-    def __init__ (self,model=None,assign=None,inline=False):
+    def __init__ (self,model=None,assign=None,inline=False,opened=False):
 
+        if not model:
+            model = roadef.args.instance_filename
+            opened = True
+            assign = roadef.args.original_solution_filename
         self._memo={}
         self.__mach_memo = None
         
         self.__inline=inline
+        self.__opened=opened
         self.__loadmodel(model)
         self.__loadassign(assign)
 
@@ -28,6 +44,8 @@ class Instance:
 
         if self.__inline:
             lines = [list(map(int,l.rstrip('\n').split())) for l in _modelfile.split('\n')]
+        if self.__opened:
+            lines = [list(map(int,l.rstrip('\n').split())) for l in _modelfile ]
         else:
             f = open(_modelfile, "r")
             lines = [list(map(int,l.rstrip('\n').split())) for l in f]
@@ -51,7 +69,7 @@ class Instance:
         self.C=np.zeros((self.nmach,self.nres),dtype=np.int32)
         self.SC=np.zeros((self.nmach,self.nres),dtype=np.int32)
 
-        self.MU=np.zeros((self.nmach,self.nmach),dtype=np.int32)
+        self.MMC=np.zeros((self.nmach,self.nmach),dtype=np.int32)
 
         
         L=[[] for i in range(self.nmach)]
@@ -65,7 +83,7 @@ class Instance:
             del(l[:self.nres])
             self.SC[m]=l[:self.nres]
             del(l[:self.nres])
-            self.MU[m]=l
+            self.MMC[m]=l
 
         # remove empty neighborhood/locations
         self.L = [l for l in L if l]
@@ -94,7 +112,7 @@ class Instance:
 
         self.S=[]
         self.R=np.zeros((self.nproc,self.nres),dtype=np.int32)
-        self.RHO=np.zeros(self.nproc,dtype=np.int32)
+        self.PMC=np.zeros(self.nproc,dtype=np.int32)
         
         S=[[] for i in range(self.nserv)]
 
@@ -103,7 +121,7 @@ class Instance:
             S[l.pop(0)].append(p)
             self.R[p]=l[:nres]
             del(l[:nres])
-            self.RHO[p]=l[0]
+            self.PMC[p]=l[0]
             
         self.nbal = lines.pop(0)[0]
         self.bT=np.zeros((self.nres,self.nres),dtype=np.int32)
@@ -130,6 +148,8 @@ class Instance:
 
         if self.__inline:
             line = [int(l) for l in _assignfile.split()]
+        elif self.__opened:
+            line =[list(map(int,l.rstrip('\n').split())) for l in _assignfile][0]
         else:
             f = open(_assignfile, "r")
             line = [list(map(int,l.rstrip('\n').split())) for l in f][0]
@@ -160,8 +180,11 @@ class Instance:
             raise Exception("Map_assign is empty")
 
         if _maptoint(map_assign) in self.__mach_memo[machine]:
-            print("coluna já calculada")
-            return False
+            return True
+
+        for s in self.S:
+            if map_assign[s].sum()> 1:
+                return False
 
         _util = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
 
@@ -181,15 +204,11 @@ class Instance:
         )
         _obj2[_obj2<0] = 0
         
-#        for s in self.S:
-#            if map_assign[s].sum() > 1:
-#                return False
-
         moved_procs = map_assign - self.__mach_map_assign[machine]
 
         moved_procs[moved_procs<0]=0
         
-        _obj3=self.RHO*moved_procs
+        _obj3=self.PMC*moved_procs
         _obj5=np.array([0],dtype=np.int32)
 
         
@@ -209,7 +228,7 @@ class Instance:
             raise Exception("")
 
         if not self.mach_validate(machine, map_assign):
-            raise Exception("")
+            raise Exception("Assign not valid for machine %d" % machine)
 
         _obj = self.__mach_memo[machine][_maptoint(map_assign)]['obj']
 
@@ -245,15 +264,12 @@ class Instance:
                 if self.__assign[p] == m and solution[p] != m:
                     moved_proc[m][p] =1
 
-        #print(moved_proc)
 
-        # capacity constraint + transient usage
         _util = q.dot(self.R)
-        #print(_util)
         _util_tr = moved_proc.dot(self.R*self.T)
-        #print(_util_tr)
+
         if np.any(_util + _util_tr > self.C):
-            raise Exception("usage/transient")
+            raise Exception("usage/transient over capacity")
 
         
         # conflict constraint + spread constraint
@@ -312,7 +328,7 @@ class Instance:
             _obj2[m]=np.array([[self.bT[r1,r2]*_avail[m,r1] - _avail[m,r2] for r2 in range(self.nres)] for r1 in range(self.nres)],dtype=np.int32)
         _obj2[_obj2<0] = 0
         
-        _obj3 = self.WPMC*self.RHO*moved
+        _obj3 = self.WPMC*self.PMC*moved
         
         _s = np.zeros(len(self.S),dtype=np.int32)
         _m=moved.sum(axis=0)
@@ -322,7 +338,7 @@ class Instance:
         
         _obj4=max(_s)
 
-        _obj5 = self.MU[self.__assign,solution]
+        _obj5 = self.MMC[self.__assign,solution]
         
         _obj = (self.Wlc*_obj1).sum() + (self.Wbal*_obj2).sum() + (_obj3).sum() + (self.WSMC*_obj4) + (self.WMMC*_obj5).sum()
 

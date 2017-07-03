@@ -68,19 +68,42 @@ if not os.path.exists(modelfile):
 if not os.path.exists(assignfile):
     sys.exit("File %s not found" % assignfile)
 
-print("Load instance")
+print("Load model instance")
 inst = Instance(model=modelfile, assign=assignfile)
 
-print("Inst. CG5")
-cg = CG5(instance=inst, epslon=epslon,name=name)
 
-print("build model")
+print("build LP model")
 # Initialize restricted master problem
+cg = CG5(instance=inst, epslon=epslon,name=name)
 cg.build_lp_model()
 
+_progress_clock = [ '\b|', '\b/' , '\b-', '\b\\']
+
+def _print_backspace(c=1):
+    print('\b'*c ,end='')
+    
+def _print_prog_clock(cnt):
+    print(_progress_clock[cnt%len(_progress_clock)],end='',flush=True)
+
+
+print("Pre-generate cols for ")
 for m in range(inst.nmach):
     cg.build_column_model(m)
 
+for m in range(inst.nmach):
+    for p in range(inst.nproc):
+        msg = " %5d/%d  %3d%%" %(m,inst.nmach, p*100/inst.nproc)
+        print(msg,end='', flush=True)
+        _print_prog_clock(p)
+        m_assign = inst.mach_map_assign(m).copy()
+        m_assign[p] = not m_assign[p]
+        if inst.mach_validate(machine=m,map_assign=m_assign):
+            cg.lp_add_col(obj=inst.mach_objective(machine=m,map_assign =m_assign),
+                          col =m_assign, machine=m
+            )
+        _print_backspace(len(msg))
+print(" %5d/%d  done" %(inst.nmach,inst.nmach))
+print()
 print("Loop")
 
 # Initialize vars
@@ -103,6 +126,8 @@ beta_step=10
 beta = beta0
 
 first_zrm = None
+
+cg_start = time()
 
 while continue_cond:
     start = time()
@@ -162,6 +187,7 @@ while continue_cond:
     #if impr > inst.nproc: beta = 0
 
     #beta = max( beta_min, beta0 * (1 - (impr*1.0)/inst.nproc))
+    #beta = max( beta_min, beta0 * (1 - (impr*1.0)/inst.nmach))
     #beta = max( beta_min, beta0 * min(1, 1 - (impr - inst.nmach*1.0)/inst.nproc))
     beta = max( beta_min, beta0 * min(1, 1 - (k *1.0)/inst.nproc))
     
@@ -181,6 +207,13 @@ while continue_cond:
     if k>= 4 and False:
         break
 
+print("generated columns in %10.3fs" % (time() - cg_start))
+    
+print("Solve MIP")
 (obj, X, alloc) = cg.solve_lp2mip()
 
 print(X)
+
+print()
+
+print(alloc)

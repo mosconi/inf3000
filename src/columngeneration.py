@@ -1,6 +1,17 @@
-
+import argparse
 import numpy as np
 from gurobipy import *
+
+import roadef
+import common
+
+class CGArgs(object):
+    pass
+
+args = CGArgs()
+
+parser = argparse.ArgumentParser(add_help=False,
+    description="Arguments required for model/solver")
 
 _progress_clock = [ '\b|', '\b/' , '\b-', '\b\\']
 
@@ -14,6 +25,30 @@ def _cb(model,where):
     if where == GRB.Callback.SIMPLEX:
         itcnt = model.cbGet(GRB.Callback.SPX_ITRCNT)
         _print_prog_clock(int(itcnt))
+    elif where == GRB.Callback.MIP:
+        itcnt = model.cbGet(GRB.Callback.MIP_NODCNT)
+        _print_prog_clock(int(itcnt))
+
+class CG(object):
+    def __init__(self, name=None, instance=None):
+        if instance is None:
+            raise Exception("instance not defined")
+        
+        self.__instance = instance
+        self.__name=name
+
+    def build_model(self):
+        pass
+
+    def build_column_model(self,machine):
+        pass
+
+    def solve(self):
+        pass
+
+    def solve_mip(self):
+        pass
+        
 
 class CG5:
     def __init__(self,
@@ -160,6 +195,10 @@ class CG5:
 
         self.__mip.update()
 
+    def build_column_model(self,machine):
+        if self.__mach_mdl[machine] is None:
+            self.__build_column_model(machine)
+        
     def __build_column_model(self,machine):
         nres = self.__instance.nres
         nproc = self.__instance.nproc
@@ -168,12 +207,12 @@ class CG5:
         alpha=1
 
         R = self.__instance.R
-        RHO = self.__instance.RHO
+        PMC = self.__instance.PMC
         bT = self.__instance.bT
         T = self.__instance.T
         C = self.__instance.C[machine]
         SC = self.__instance.SC[machine]
-        MU = self.__instance.MU[self.__instance.assign(),machine]
+        MMC = self.__instance.MMC[self.__instance.assign(),machine]
         Wlc = self.__instance.Wlc
         Wbal = self.__instance.Wbal
         WPMC = self.__instance.WPMC
@@ -335,7 +374,7 @@ class CG5:
         )
 
         _obj3_constr = model.addConstr(
-            obj3 == WPMC*quicksum(RHO[p]*x[p]
+            obj3 == WPMC*quicksum(PMC[p]*x[p]
             for p in [p for p in range(nproc) 
                       if p not in self.__instance.mach_assign(machine)]
             ),
@@ -343,7 +382,7 @@ class CG5:
         )
 
         _obj5_constr = model.addConstr(
-            obj5 == WMMC*quicksum(MU[p]*x[p]
+            obj5 == WMMC*quicksum(MMC[p]*x[p]
             for p in [p for p in range(nproc) 
                       if p not in self.__instance.mach_assign(machine)]
             ),
@@ -414,7 +453,7 @@ class CG5:
             dtype=np.int32
         )
 
-        roadef = int(model._obj1.X +model._obj2.X +model._obj3.X +model._obj5.X)
+        roadef = round(model._obj1.X +model._obj2.X +model._obj3.X +model._obj5.X)
 
         return tuple([roadef, model.objVal, q, model])
 
@@ -425,11 +464,11 @@ class CG5:
         nproc = self.__instance.nproc
 
         R = self.__instance.R
-        RHO = self.__instance.RHO
+        PMC = self.__instance.PMC
         bT = self.__instance.bT
         C = self.__instance.C[machine]
         SC = self.__instance.SC[machine]
-        MU = self.__instance.MU[self.__instance.assign(),machine]
+        MMC = self.__instance.MMC[self.__instance.assign(),machine]
         Wlc = self.__instance.Wlc
         Wbal = self.__instance.Wbal
         WPMC = self.__instance.WPMC
@@ -556,7 +595,7 @@ class CG5:
         )
 
         model.addConstr(
-            obj3 == WPMC*quicksum(  RHO[p]*x[p]
+            obj3 == WPMC*quicksum(  PMC[p]*x[p]
             for p in [p for p in range(nproc) 
                       if p not in self.__instance.mach_assign(machine)]
             ),
@@ -564,7 +603,7 @@ class CG5:
         )
 
         model.addConstr(
-            obj5 == WMMC*quicksum(MU[p]*x[p]
+            obj5 == WMMC*quicksum(MMC[p]*x[p]
             for p in [p for p in range(nproc) 
                       if p not in self.__instance.mach_assign(machine)]
             ),
@@ -594,7 +633,7 @@ class CG5:
             dtype=np.int32
         )
 
-        return tuple([int(roadef.X), model.objVal, q, model])
+        return tuple([round(roadef.X), model.objVal, q, model])
 
     def __dump_relax(self):
         self.__lp.update()
@@ -1139,11 +1178,11 @@ class CG5:
         nres = self.__instance.nres
         
         R = self.__instance.R
-        RHO = self.__instance.RHO
+        PMC = self.__instance.PMC
         bT = self.__instance.bT
         C = self.__instance.C[m]
         SC = self.__instance.SC[m]
-        MU = self.__instance.MU[self.__instance.assign(),m]
+        MMC = self.__instance.MMC[self.__instance.assign(),m]
         Wlc = self.__instance.Wlc
         Wbal = self.__instance.Wbal
         WPMC = self.__instance.WPMC
@@ -1168,13 +1207,13 @@ class CG5:
         _b[_b<0] = 0
         _obj2=(Wbal*_b).sum()
 
-        _rhox =  RHO*(x.reshape(nproc))
+        _rhox =  PMC*(x.reshape(nproc))
 
         _rhox[[p for p in range(nproc) if p in self.__instance.mach_assign(m)]] =0
         
         _obj3 = WPMC*_rhox.sum()
 
-        _mu = MU*(x.reshape(nproc))
+        _mu = MMC*(x.reshape(nproc))
         _mu[[p for p in range(nproc) if p in self.__instance.mach_assign(m)]] =0
 
         _obj5 = WMMC*_mu.sum()
@@ -1336,3 +1375,20 @@ class CG5:
 #            input("Press Enter to continue...")
 #           raise Exception("Mismatch")
         
+
+
+class CG10(CG):
+    def __init__(self,instance=None,name=None):
+        super().__init__(instance=instance,name=name)
+        self.__env = None
+        if name:
+            self.__env=Env("%s.log" %name)
+
+    def build_model(self):
+        self.__build_model()
+
+    def __build_model(self):
+        if self.__mip:
+            return
+
+        self.__mip.
