@@ -200,19 +200,19 @@ for p in range(nproc):
             y[p,i,j].start=0
 
 if verbose: print("creating t",flush=True)
-t = mdl.addVars(nmach,nmach,vtype=GRB.SEMIINT,lb=0,name="t")
+t = mdl.addVars(nmach,nmach,vtype=GRB.INTEGER,lb=0,name="t")
 
 if verbose: print("creating u",flush=True)
-u = mdl.addVars(nmach,nres,name="u",vtype=GRB.SEMIINT,lb=0,ub=C)
+u = mdl.addVars(nmach,nres,name="u",vtype=GRB.INTEGER,lb=0,ub=C)
 
 if verbose: print("creating a",flush=True)
-a = mdl.addVars(nmach,nres,name="a",vtype=GRB.SEMIINT,lb=0,ub=C)
+a = mdl.addVars(nmach,nres,name="a",vtype=GRB.INTEGER,lb=0,ub=C)
 
 if verbose: print("creating d",flush=True)
-d = mdl.addVars(nmach,nres,name="d",vtype=GRB.SEMIINT,lb=0)
+d = mdl.addVars(nmach,nres,name="d",vtype=GRB.INTEGER,lb=0)
 
 if verbose: print("creating b",flush=True)
-b = mdl.addVars(nmach,nres,nres,vtype=GRB.SEMIINT,name="b")
+b = mdl.addVars(nmach,nres,nres,vtype=GRB.INTEGER,name="b")
 
 if verbose: print("creating o",flush=True)
 o = mdl.addVars(nserv,len(L),vtype=GRB.BINARY,name="o")
@@ -228,11 +228,11 @@ for s in range(nserv):
         h[s,n].start=0
 
 if verbose: print("creating obj vars",flush=True)
-loadcost = mdl.addVars(nres,name="locadcost",vtype=GRB.SEMIINT,obj=Wlc)
-balancecost= mdl.addVars(nres,nres,name="balancecost",vtype=GRB.SEMIINT,obj=Wbal)
-pmc = mdl.addVar(name="pmc",vtype=GRB.SEMIINT,obj=WPMC)
-smc = mdl.addVar(name="smc",vtype=GRB.SEMIINT,obj=WSMC)
-mmc = mdl.addVar(name="mmc",vtype=GRB.SEMIINT,obj=WMMC)
+loadcost = mdl.addVars(nres,name="lc",vtype=GRB.INTEGER,obj=Wlc)
+balancecost= mdl.addVars(nres,nres,name="bc",vtype=GRB.INTEGER,obj=Wbal)
+pmc = mdl.addVar(name="pmc",vtype=GRB.INTEGER,obj=WPMC)
+smc = mdl.addVar(name="smc",vtype=GRB.INTEGER,obj=WSMC)
+mmc = mdl.addVar(name="mmc",vtype=GRB.INTEGER,obj=WMMC)
 
 mdl_vars = time() - mdl_start
 
@@ -240,10 +240,10 @@ if verbose: print("model update",flush=True)
 mdl.update()
 
 if verbose: print("constr. all proc assigned")
-mdl.addConstrs((x.sum(p,'*') == 1 for p in range(nproc)), name="process_assigned")
+mdl.addConstrs((x.sum(p,'*') == 1 for p in range(nproc)), name="p_assign")
 
 if verbose: print("constr. utilization")
-mdl.addConstrs((u[m,r] == quicksum(x[p,m]*R[p,r] for p in range(nproc)) for r in range(nres) for m in range(nmach)),name="utilization")
+mdl.addConstrs((u[m,r] == quicksum(x[p,m]*R[p,r] for p in range(nproc)) for r in range(nres) for m in range(nmach)),name="util")
 
 if verbose: print("constr. util < cap")
 mdl.addConstrs((u[m,r] <= C[m,r] for r in range(nres) for m in range(nmach)),
@@ -259,16 +259,16 @@ for r in range(nres):
         mdl.addConstrs((quicksum(x[p,m]*R[p,r] for p in range(nproc)) + quicksum(z_minus[p,m]*R[p,r] for p in range(nproc)) <= C[m,r] for m in range(nmach)),name="transient")
 
 if verbose: print("constr. overload")
-mdl.addConstrs((u[m,r] - d[m,r] <= C_bar[m,r] for r in range(nres) for m in range(nmach)),name="overload")
+mdl.addConstrs((u[m,r] - d[m,r] <= C_bar[m,r] for r in range(nres) for m in range(nmach)),name="load")
 
 
 if verbose: print("constr. z*[p,m]")    
 
-mdl.addConstrs((z_plus[p,m] >= x[p,m] - x_bar[p,m] for  p in range(nproc) for m in range(nmach) ))
-mdl.addConstrs((z_minus[p,m] >= x_bar[p,m] - x[p,m] for  p in range(nproc) for m in range(nmach)) )
+mdl.addConstrs((z_plus[p,m] >= x[p,m] - x_bar[p,m] for  p in range(nproc) for m in range(nmach) ),name="zplus")
+mdl.addConstrs((z_minus[p,m] >= x_bar[p,m] - x[p,m] for  p in range(nproc) for m in range(nmach)),name="zminus" )
 
 if verbose: print("constr. conflito")
-mdl.addConstrs((quicksum(x[p,m] for p in S[s])<=1 for s in range(len(S)) for m in range(nmach)), name="conflito")
+mdl.addConstrs((quicksum(x[p,m] for p in S[s])<=1 for s in range(len(S)) for m in range(nmach)), name="conflict")
 
 if verbose: print("constr. 2*y[p,i,j] >= x_bar[pi] + x[pj]")
 mdl.addConstrs((2*y[p,i,j] >= z_minus[p,i] + z_plus[p,j] for p in range(nproc) for i in range(nmach) for j in range(nmach)), name="y")
@@ -279,10 +279,10 @@ mdl.addConstrs((t[i,j]==quicksum(y[p,i,j] for p in range(nproc)) for i in range(
 if verbose: print("constr. o[s,l]")
 for s in range(nserv):
     for l in range(len(L)):
-        mdl.addConstrs((o[s,l] >= x[p,m] for p in S[s] for m in L[l]),name=("o[%d,%d]"%(s,l)))
-        mdl.addConstr((o[s,l]<=quicksum((x[p,m] for p in S[s] for m in L[l]))), name="o_ub")
+        mdl.addConstrs((o[s,l] >= x[p,m] for p in S[s] for m in L[l]),name=("o_lb[%d,%d]"%(s,l)))
+        mdl.addConstr((o[s,l]<=quicksum((x[p,m] for p in S[s] for m in L[l]))), name="o_ub[%d,%d]"%(s,l))
         
-mdl.addConstrs((quicksum(o[s,l] for l in range(len(L))) >= delta[s] for s in range(nserv)),name="serv_spread")
+mdl.addConstrs((quicksum(o[s,l] for l in range(len(L))) >= delta[s] for s in range(nserv)),name="spread")
 
 if verbose: print("constr. g[s]")
 mdl.addConstrs((g[s] == quicksum(z_plus[p,m] for m in range(nmach) for p in S[s]) for s in range(nserv)), name="g")
@@ -290,8 +290,8 @@ mdl.addConstrs((g[s] == quicksum(z_plus[p,m] for m in range(nmach) for p in S[s]
 if verbose: print("constr. h[s,n]")
 for s in range(nserv):
     for n in range(len(N)):
-        mdl.addConstrs((h[s,n] >= x[p,m] for p in S[s] for m in N[n]),name=("h[%d,%d]"%(s,l)))
-        mdl.addConstr((h[s,n] <= quicksum((x[p,m] for p in S[s] for m in N[n]))),name="h_upperbound")
+        mdl.addConstrs((h[s,n] >= x[p,m] for p in S[s] for m in N[n]),name=("h_lb[%d,%d]"%(s,l)))
+        mdl.addConstr((h[s,n] <= quicksum((x[p,m] for p in S[s] for m in N[n]))),name="h_ub")
 
 for s in range(nserv):
     if s in sdep:
@@ -304,18 +304,18 @@ mdl.addConstrs((b[m,r1,r2] >= bT[r1,r2]*a[m,r1] - a[m,r2] for m in range(nmach) 
 
 
 if verbose: print("constr. loadcost")
-mdl.addConstrs((loadcost[r] == quicksum(d[m,r] for m in range(nmach)) for r in range(nres)), name="loadcost")
+mdl.addConstrs((loadcost[r] == quicksum(d[m,r] for m in range(nmach)) for r in range(nres)), name="lc")
 
-mdl.addConstrs((balancecost[r1,r2] == quicksum(b[m,r1,r2] for m in range(nmach)) for r1 in range(nres) for r2 in range(nres)))
+mdl.addConstrs((balancecost[r1,r2] == quicksum(b[m,r1,r2] for m in range(nmach)) for r1 in range(nres) for r2 in range(nres)),name="bc")
 
 if verbose: print("constr. PMC")
-mdl.addConstr(pmc == quicksum(RHO[p]*z_plus[p,m] for m in range(nmach) for p in range(nproc)))
+mdl.addConstr(pmc == quicksum(RHO[p]*z_plus[p,m] for m in range(nmach) for p in range(nproc)),name="pmc")
 
 if verbose: print("constr. SMC")
-mdl.addConstrs(smc >= g[s] for s in range(nserv))
+mdl.addConstrs((smc >= g[s] for s in range(nserv)),name="smc")
 
 if verbose: print("constr. MMC")
-mdl.addConstr(mmc == quicksum(MU[i,j]*t[i,j] for i in range(nmach) for j in range(nmach)))
+mdl.addConstr(mmc == quicksum(MU[i,j]*t[i,j] for i in range(nmach) for j in range(nmach)),name="mmc")
 
 mdl_constrs = time() - mdl_start - mdl_vars
 
