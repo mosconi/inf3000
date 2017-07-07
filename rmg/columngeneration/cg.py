@@ -13,11 +13,17 @@ class CG(object):
     def build_model(self):
         pass
 
+    def build_lpmodel(self):
+        pass
+    
+    def relax(self):
+        pass
+
     def build_column_model(self,machine):
         pass
 
     def solve(self):
         pass
 
-    def solve_mip(self):
+    def solve_lp(self):
         pass
