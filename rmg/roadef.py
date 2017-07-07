@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
     
-parser = argparse.ArgumentParser(prog="ROADEF",add_help=False,
+parser = argparse.ArgumentParser(add_help=False,
                                  description="Arguments required by roadef")
 
 # Descritos no roadef
@@ -17,7 +17,7 @@ roadef.add_argument("-p",dest="instance_filename", type=argparse.FileType('r'),
                     help="Load the data associated with the instance instance_filename")
 roadef.add_argument("-i",dest="original_solution_filename", type=argparse.FileType('r'),
                     help="Designate the file with the reference solution")
-roadef.add_argument("-o",dest="new_solution_filename", type=argparse.FileType('wb',0),
+roadef.add_argument("-o",dest="new_solution_filename", type=argparse.FileType('w'),
                     help="Designate the result file")
 roadef.add_argument("-s",dest="seed",
                     help="Force program with random to be deterministic")

@@ -1,55 +1,39 @@
 import argparse
 
-import roadef
-import numpy as np
+from collections import namedtuple,defaultdict
 
+from gurobipy import tupledict
+
+import numpy as np
 
 parser = argparse.ArgumentParser(add_help=False,
                                  description="Arguments for instance data")
 
-args = parser.parse_known_args()[0]
-
-
-def _maptoint(m):
-    a = 0
-    for b in m:
-        a = a*2 + b.item()
-    return a
-
 class Instance:
-    def __new__(cls, model=None, assign=None,inline=False,opened=False):
-        print()
-        if not model and not roadef.args.instance_filename:
-            raise ValueError("Missing model")
-        if not assign and not roadef.args.original_solution_filename:
-            raise ValueError("Missing initial assigment")
-        return super(Instance,cls).__new__(cls)
+    def __new__  (self, args):
+        if args.instance_filename is None:
+            raise Exception("Instance file not provided")
+        if args.original_solution_filename is None:
+            raise Exception("Originial solution file not provided")
+
+        return super().__new__(self)
     
-    def __init__ (self,model=None,assign=None,inline=False,opened=False):
-
-        if not model:
-            model = roadef.args.instance_filename
-            opened = True
-            assign = roadef.args.original_solution_filename
-        self._memo={}
-        self.__mach_memo = None
+    def __init__ (self, args):
         
-        self.__inline=inline
-        self.__opened=opened
-        self.__loadmodel(model)
-        self.__loadassign(assign)
+        self.__args=args
+        self.__memo=tupledict()
+        self.__mach_memo = tupledict()
+        self.nproc = 0
+        self.nserv = 0
+        self.nres = 0
+        self.nmach = 0
 
+        self.__loadmodel()
+        self.__loadassign()
+        
+    def __loadmodel(self):
 
-    def __loadmodel(self,_modelfile):
-
-        if self.__inline:
-            lines = [list(map(int,l.rstrip('\n').split())) for l in _modelfile.split('\n')]
-        if self.__opened:
-            lines = [list(map(int,l.rstrip('\n').split())) for l in _modelfile ]
-        else:
-            f = open(_modelfile, "r")
-            lines = [list(map(int,l.rstrip('\n').split())) for l in f]
-            f.close()
+        lines = [list(map(int,l.rstrip('\n').split())) for l in self.__args.instance_filename ]
 
         nres = lines.pop(0)[0]
 
@@ -72,28 +56,31 @@ class Instance:
         self.MMC=np.zeros((self.nmach,self.nmach),dtype=np.int32)
 
         
-        L=[[] for i in range(self.nmach)]
-        N=[[] for i in range(self.nmach)]
+        #L=[[] for i in range(self.nmach)]
+        self.L = defaultdict(list)
+        self.N = defaultdict(list)
 
+        self.iN = np.array([-1] * self.nmach,dtype=np.int32)
+        self.iL = np.array([-1] * self.nmach,dtype=np.int32)
+        
         for m in range(self.nmach):
             l = lines.pop(0)
-            N[l.pop(0)].append(m) # neighborhood
-            L[l.pop(0)].append(m) # location
+            neigh = l.pop(0) # neighborhood 
+            loc = l.pop(0)   # location
+            self.iN[m] = neigh
+            self.iL[m] = loc
+            self.N[ neigh ].append(m) 
+            self.L[ loc ].append(m) 
             self.C[m]=l[:self.nres]
             del(l[:self.nres])
             self.SC[m]=l[:self.nres]
             del(l[:self.nres])
             self.MMC[m]=l
 
-        # remove empty neighborhood/locations
-        self.L = [l for l in L if l]
-        self.N = [n for n in N if n]
-
-    
         nserv = lines.pop(0)[0]
         self.nserv=nserv
         delta=[0 for s in range(nserv)]
-        sdep={}
+        sdep=defaultdict(list)
 
         self.gamma = np.zeros((nserv,nserv), dtype=np.bool)
         for s in range(self.nserv):
@@ -110,15 +97,13 @@ class Instance:
         self.sdep = sdep
         self.nproc = nproc
 
-        self.S=[]
+        self.S=defaultdict(list)
         self.R=np.zeros((self.nproc,self.nres),dtype=np.int32)
         self.PMC=np.zeros(self.nproc,dtype=np.int32)
         
-        S=[[] for i in range(self.nserv)]
-
         for p in range(nproc):
             l = lines.pop(0)
-            S[l.pop(0)].append(p)
+            self.S[l.pop(0)].append(p)
             self.R[p]=l[:nres]
             del(l[:nres])
             self.PMC[p]=l[0]
@@ -139,24 +124,16 @@ class Instance:
         self.WSMC=lines[0][1]
         self.WMMC=lines[0][2]
     
-        self.S = [s for s in S if s]    
 
-        self.__mach_memo=[{} for m in range(self.nmach)]
+    def __loadassign(self):
 
-
-    def __loadassign(self, _assignfile):
-
-        if self.__inline:
-            line = [int(l) for l in _assignfile.split()]
-        elif self.__opened:
-            line =[list(map(int,l.rstrip('\n').split())) for l in _assignfile][0]
-        else:
-            f = open(_assignfile, "r")
-            line = [list(map(int,l.rstrip('\n').split())) for l in f][0]
-            f.close()
+        line =[list(map(int,l.rstrip('\n').split())) for l in self.__args.original_solution_filename][0]
         self.__assign=line[:]
         self.__mach_assign=[[p[0] for p in enumerate(line) if p[1] == m]  for m in range(self.nmach)]
-        self.__mach_map_assign=np.array([[p==m for p in line ] for m in range(self.nmach)],dtype=np.int32)
+        self.__mach_map_assign=np.zeros((self.nproc,self.nmach),dtype=np.int32)
+        for p in range(self.nproc):
+            for m in range(self.nmach):
+                self.__mach_map_assign[p,m] = line[p]==m
 
     def assign(self):
         return self.__assign
@@ -346,3 +323,5 @@ class Instance:
         
 
     
+    def dump(self):
+        self.N
