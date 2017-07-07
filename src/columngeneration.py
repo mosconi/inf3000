@@ -21,6 +21,15 @@ def _print_backspace():
 def _print_prog_clock(cnt):
     print(_progress_clock[cnt%len(_progress_clock)],end='',flush=True)
 
+def _cb2(model,where):
+    if where == GRB.Callback.SIMPLEX:
+        itcnt = model.cbGet(GRB.Callback.SPX_ITRCNT)
+        _print_prog_clock(int(itcnt))
+    elif where == GRB.Callback.MIP:
+        itcnt = model.cbGet(GRB.Callback.MIP_NODCNT)
+        _print_prog_clock(int(itcnt))
+
+    
 def _cb(model,where):
     if where == GRB.Callback.SIMPLEX:
         itcnt = model.cbGet(GRB.Callback.SPX_ITRCNT)
@@ -28,6 +37,14 @@ def _cb(model,where):
     elif where == GRB.Callback.MIP:
         itcnt = model.cbGet(GRB.Callback.MIP_NODCNT)
         _print_prog_clock(int(itcnt))
+    elif where == GRB.Callback.MIPSOL:
+        ndcnt = model.cbGet(GRB.Callback.MIPSOL_NODCNT)
+        obj =  model.cbGet(GRB.Callback.MIPSOL_OBJ)
+        obj_best =  model.cbGet(GRB.Callback.MIPSOL_OBJBST)
+        bnd =  model.cbGet(GRB.Callback.MIPSOL_OBJBND)
+        if ndcnt > 0:
+            if bnd/obj -1 < .5:
+                model.terminate()
 
 class CG(object):
     def __init__(self, name=None, instance=None):
@@ -422,7 +439,6 @@ class CG5:
 
         self.__mach_mdl[machine] = model
 
-        
     def compute_column(self,machine, pi, alpha,k):
         return self.__compute_column2(machine, pi, alpha,k)
 
@@ -955,7 +971,7 @@ class CG5:
         if file is not None:
             self.__mip.write(file)
 
-        self.__mip.optimize(_cb)
+        self.__mip.optimize(_cb2)
         _print_backspace()
 
         _obj = self.__mip.ObjVal
@@ -1374,7 +1390,9 @@ class CG5:
 #            model.write("modelo_mismatch.mps")
 #            input("Press Enter to continue...")
 #           raise Exception("Mismatch")
-        
+
+    def lpwrite(self,file):
+        self.__lp.write(file)
 
 
 class CG10(CG):
@@ -1391,4 +1409,4 @@ class CG10(CG):
         if self.__mip:
             return
 
-        self.__mip.
+        self.__mip = Model()
