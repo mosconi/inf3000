@@ -21,8 +21,8 @@ class Instance:
     def __init__ (self, args):
         
         self.__args=args
-        self.__memo=tupledict()
-        self.__mach_memo = tupledict()
+        self.__memo=dict()
+        self.__mach_memo = dict()
         self.nproc = 0
         self.nserv = 0
         self.nres = 0
@@ -123,6 +123,8 @@ class Instance:
         self.WPMC=lines[0][0]
         self.WSMC=lines[0][1]
         self.WMMC=lines[0][2]
+        for m in range(self.nmach):
+            self.__mach_memo[m]=dict()
     
 
     def __loadassign(self):
@@ -145,7 +147,7 @@ class Instance:
         return self.__mach_map_assign
 
     def mach_map_assign(self,m):
-        return self.__mach_map_assign[m]
+        return self.__mach_map_assign[:,m]
 
 
     def mach_validate(self, machine = None, map_assign = None):
@@ -156,9 +158,9 @@ class Instance:
         if map_assign is None:
             raise Exception("Map_assign is empty")
 
-        if _maptoint(map_assign) in self.__mach_memo[machine]:
+        if tuple(map_assign) in self.__mach_memo[machine]:
             return True
-
+        
         for s in self.S:
             if map_assign[s].sum()> 1:
                 return False
@@ -181,7 +183,7 @@ class Instance:
         )
         _obj2[_obj2<0] = 0
         
-        moved_procs = map_assign - self.__mach_map_assign[machine]
+        moved_procs = map_assign - self.__mach_map_assign[:,machine]
 
         moved_procs[moved_procs<0]=0
         
@@ -189,7 +191,7 @@ class Instance:
         _obj5=np.array([0],dtype=np.int32)
 
         
-        self.__mach_memo[machine][_maptoint(map_assign)]={
+        self.__mach_memo[machine][tuple(map_assign)]={
             'obj': (self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum(),
             'util': _util,
             'moved_proc': moved_procs
@@ -207,7 +209,7 @@ class Instance:
         if not self.mach_validate(machine, map_assign):
             raise Exception("Assign not valid for machine %d" % machine)
 
-        _obj = self.__mach_memo[machine][_maptoint(map_assign)]['obj']
+        _obj = self.__mach_memo[machine][tuple(map_assign)]['obj']
 
         return _obj
 

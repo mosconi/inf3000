@@ -22,9 +22,6 @@ parser = argparse.ArgumentParser(description="",
 # Other parameters:
 
 args = parser.parse_args()
-
-print(args)
-
 if args.name:
     print("Rodrigo Mosconi (1512344) <rmosconi@inf.puc-rio.br>")
     sys.exit(0)

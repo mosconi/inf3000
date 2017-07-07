@@ -4,16 +4,16 @@ import argparse,os,sys
 import numpy as np
 from time import time
 
-from rmg import roadef,common,instance,mip
+from rmg import roadef,common,instance,columngeneration
 from rmg.instance import Instance
-
+import rmg.columngeneration as cg
 from gurobipy import *
 
 parser = argparse.ArgumentParser(description="",
                                  parents=[roadef.parser,
                                           common.parser,
                                           instance.parser,
-                                          mip.parser
+                                          columngeneration.parser
                                           
 ]
 )
@@ -33,9 +33,15 @@ np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x:
 
 inst = Instance(args)
 
-mip = mip.MIP1(instance=inst,args=args)
+cg = cg.CG2(instance=inst,args=args)
 
-mip.build_model()
+cg.build_lpmodel()
+cg.lpwrite()
+for m in range(inst.nmach):
+    cg.build_column_model(m)
+
+del(cg)
+sys.exit(0)
 mip.write()
 
 solution = mip.solve()
