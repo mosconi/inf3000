@@ -7,7 +7,7 @@ from time import time
 from rmg import roadef,common,instance,columngeneration
 from rmg.instance import Instance
 import rmg.columngeneration as cg
-from gurobipy import *
+from gurobipy import tupledict
 
 parser = argparse.ArgumentParser(description="",
                                  parents=[roadef.parser,
@@ -36,15 +36,68 @@ inst = Instance(args)
 cg = cg.CG2(instance=inst,args=args)
 
 cg.build_lpmodel()
-cg.lpwrite()
+
 for m in range(inst.nmach):
     cg.build_column_model(m)
 
-del(cg)
-sys.exit(0)
-mip.write()
+omega=0
+k=0
+impr=0
+best_zrm = + np.inf
+best_omega = - np.inf
+best_pi = np.zeros(inst.nproc,dtype=np.float64)                        # Duais de processos
+best_mu = np.zeros(inst.nmach,dtype=np.float64)                        # Duais de máquina
+best_gamma = np.zeros(inst.nserv,dtype=np.float64)                     # Duais de serviço migrado
+best_eta_lb = np.zeros((inst.nserv,inst.nmach),dtype=np.float64)       # Dual de h[s,n,m]
+best_eta_ub = np.zeros((inst.nserv,len(inst.N)),dtype=np.float64)      # Dual de h[s,n]
+best_omikron_lb = np.zeros((inst.nserv,inst.nmach),dtype=np.float64)   # Dual de o[s,l,m]
+best_omikron_ub = np.zeros((inst.nserv,len(inst.L)),dtype=np.float64)  # Dual de o[s,l]
 
-solution = mip.solve()
+alpha = .5
+
+continue_cond = True
+
+while continue_cond:
+
+    cg.lpwrite()
+
+    res = cg.solve_relax()
+    
+    if res is None:
+        raise Exception("LP não ótimo")
+
+    pi = alpha * best_pi + (1 - alpha) * res.pi
+    mu = alpha * best_mu + (1 - alpha) * res.mu
+    gamma = alpha * best_gamma + (1 - alpha) * res.gamma
+    eta_lb = alpha * best_eta_lb + (1 - alpha) * res.eta_lb
+    eta_ub = alpha * best_eta_ub + (1 - alpha) * res.eta_ub
+    omikron_lb = alpha * best_omikron_lb + (1 - alpha) * res.omikron_lb
+    omikron_ub = alpha * best_omikron_ub + (1 - alpha) * res.omikron_ub
+    
+    for m in range(inst.nmach):
+        sigma = eta_lb[:,m] + eta_ub[:,inst.iN[m]] + omikron_lb[:,m] + omikron_ub[:,inst.iL[m]]
+
+        cres = cg.compute_column(m,pi = pi,
+                                 gamma = gamma,
+                                 sigma = sigma,
+                                 mu = mu[m])
+
+        if cres is None:
+            raise Exception("problema ao calcular coluna")
+            
+
+        omega += cres.rc
+        cg.lp_add_col(m,cres)
+    
+    k+=1
+    if k >= 4:
+        continue_cond = False
+    
+cg.lpwrite()
+sys.exit(0)
+
+solution = cg.solve()
+
 
 print(' '.join(str(i) for i in solution.assign))
 

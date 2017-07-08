@@ -62,6 +62,14 @@ class CG(object):
 
         self._lp.write("%s.lp" %self._args.run_name)
         self._lp.write("%s.mps" %self._args.run_name)
+        
+
+    def lpiis(self):
+        if not self._lp:
+            raise Exception("LP Model not defined")
+        
+        self._lp.computeIIS()
+        self._lp.write("%s.ilp" %self._args.run_name)
 
 
     def solve(self):
