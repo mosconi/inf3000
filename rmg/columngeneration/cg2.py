@@ -1,5 +1,5 @@
 import numpy as np
-from .solution import RelaxSolution,CGColumn
+from .solution import RelaxSolution,CGColumn,CGValidate,CGValidateStatus,CGAdd,CGAddStatus
 
 from .cg import CG
 from gurobipy import *
@@ -53,13 +53,20 @@ class CG2(CG):
             [self._g_constr[s] for s in S]
             )
 
-        self._lbd[machine,len(self._lbd.select(machine,'*'))] = self._lp.addVar(
+        _c = len(self._lbd.select(machine,'*'))
+        var = self._lp.addVar(
             obj = compcol.obj,
             vtype=GRB.CONTINUOUS,
             ub=1,lb=0,
             column = _col,
             name = "lbd[%d,%d]" % (machine,len(self._lbd.select(machine,'*')))
-            )
+        )
+        self._lbd[machine,_c] = var
+        var._procs = compcol.procs
+        #self._procs[machine][tuple(compcol.procs)] +=1
+        
+        return CGAdd(status=CGAddStatus.Added,var =var)
+        
         
         
     def build_lpmodel(self):
@@ -111,6 +118,7 @@ class CG2(CG):
             c = x0[:,m]
             obj= self._instance.mach_objective(m,c)
             self._lbd[m,0].obj=obj
+            self._lbd[m,0]._procs = c 
             
         self._g=self._lp.addVars(nserv,vtype=GRB.CONTINUOUS,
                                  lb=0,ub=1,name="g")
@@ -188,6 +196,7 @@ class CG2(CG):
         nres = self._instance.nres
         nserv = self._instance.nserv
         R = self._instance.R
+        T = self._instance.T
         C = self._instance.C[machine]
         SC = self._instance.SC[machine]
         S = self._instance.S
@@ -204,7 +213,7 @@ class CG2(CG):
         pi = np.ones(nproc,dtype=np.float64)      # duais de processos
         mu = 1                                    # dual  de máquina
         sigma = np.ones(nserv,dtype=np.float64)   # soma das duais de serviços
-        gamma = np.ones(nserv,dtype=np.float64) # duais de serviço migrado
+        gamma = np.ones(nserv,dtype=np.float64)   # duais de serviço migrado
 
         self._mach[machine].model = Model(env=self._env,name="mach_%d" % machine)
 
@@ -222,20 +231,27 @@ class CG2(CG):
         self._mach[machine].model.Params.NumericFocus = 3
 
         self._mach[machine]._obj = self._mach[machine].model.addVar(vtype=GRB.INTEGER,name="obj",obj=1)
-        self._mach[machine]._x = self._mach[machine].model.addVars(nproc,
-                                                                   vtype=GRB.BINARY,name="x",obj=-pi)
 
-        self._mach[machine]._z = self._mach[machine].model.addVars(nproc,
+        self._mach[machine]._pixp = self._mach[machine].model.addVar(vtype=GRB.CONTINUOUS,name="pixp",obj=-1)
+        self._mach[machine]._hsigma = self._mach[machine].model.addVar(vtype=GRB.CONTINUOUS,name="hsigma",obj=-1)
+        self._mach[machine]._ggamma = self._mach[machine].model.addVar(vtype=GRB.CONTINUOUS,name="ggamma",obj=-1)
+
+
+        
+        self._mach[machine]._x = self._mach[machine].model.addVars(nproc,
+                                                                   vtype=GRB.BINARY,name="x")
+
+        self._mach[machine]._z = self._mach[machine].model.addVars(nproc,ub=x0,
                                                                    vtype=GRB.BINARY,name="z")
 
         self._mach[machine]._g = self._mach[machine].model.addVars(nserv,
-                                                                   vtype=GRB.BINARY,name="g",obj=-gamma)
+                                                                   vtype=GRB.BINARY,name="g")  # serviço migrado
 
         self._mach[machine]._u = self._mach[machine].model.addVars(nres,
                                                                    vtype=GRB.INTEGER,lb=0,ub=C,name="u")
 
         self._mach[machine]._ut = self._mach[machine].model.addVars(nres,
-                                                                    vtype=GRB.INTEGER,lb=0,ub=C,name="ut")
+                                                                    vtype=GRB.INTEGER,lb=0,ub=C*T,name="ut")
 
         self._mach[machine]._d = self._mach[machine].model.addVars(nres,
                                                                    vtype=GRB.INTEGER,lb=0,ub=C,name="d")
@@ -246,12 +262,9 @@ class CG2(CG):
         self._mach[machine]._b = self._mach[machine].model.addVars(nres,nres,
                                                                    vtype=GRB.INTEGER,lb=0,name="b")
 
-        self._mach[machine]._lc = self._mach[machine].model.addVars(nres,
-                                                                    vtype=GRB.INTEGER,lb=0,name="lc")
-
-        # serve tanto para h[s,n] e o[s,n]
-        self._mach[machine]._s = self._mach[machine].model.addVars(nserv,
-                                                                   vtype=GRB.BINARY,name="s",obj=-sigma)
+        # serve tanto para h[s,n], h[s,n,m] e o[s,l] o[s,l,m]
+        self._mach[machine]._h = self._mach[machine].model.addVars(nserv,
+                                                                   vtype=GRB.BINARY,name="h") # serviço presente
 
 
         self._mach[machine]._pmc = self._mach[machine].model.addVar(vtype=GRB.INTEGER,
@@ -273,20 +286,24 @@ class CG2(CG):
 
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._z[p] >= 
-                x0[p] - self._mach[machine]._x[p]
+                self._mach[machine]._z[p] == 
+                x0[p] *(1 - self._mach[machine]._x[p])
                 for p in range(nproc)),
             name="z"
         )
 
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._g[s] == self._mach[machine]._x.sum(S[s])
+                self._mach[machine]._g[s] == quicksum(self._mach[machine]._z[p] for p in S[s])
                 for s in S),
             name="g"
         )
-
-
+#        self._mach[machine].model.addConstrs(
+#            (
+#                -self._mach[machine]._g[s] == -self._mach[machine]._z.sum(S[s])
+#                for s in S),
+#            name="g"
+#        )
 
         self._mach[machine].model.addConstrs(
             (
@@ -295,10 +312,9 @@ class CG2(CG):
             name="util"
         )
 
-        
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._ut[r] == quicksum(R[p,r]*self._mach[machine]._z[p] for p in range(nproc))
+                self._mach[machine]._ut[r] == T[r]*quicksum(R[p,r]*self._mach[machine]._z[p] for p in range(nproc))
                 for r in range(nres)),
             name="transient"
         )
@@ -311,14 +327,14 @@ class CG2(CG):
 
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._a[r] ==  C[r] - self._mach[machine]._ut[r]
+                self._mach[machine]._a[r] ==  C[r] - self._mach[machine]._u[r]
                 for r in range(nres)),
             name="avail"
         )
             
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._d[r] == self._mach[machine]._ut[r] -  SC[r]
+                 self._mach[machine]._d[r] >= self._mach[machine]._u[r] -  SC[r]
                 for r in range(nres)),
             name="load"
         )
@@ -332,17 +348,34 @@ class CG2(CG):
             
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._x.sum(S[s]) <=1
+                self._mach[machine]._x.sum(S[s])  <= 1
                 for s in S),
             name="conflict"
         )
-
+        
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._x.sum(S[s]) <=1
-                for s in S),
-            name="conflict"
+                self._mach[machine]._h[s] >= self._mach[machine]._x[p] 
+                for s in S
+                for p in S[s]
+            ),
+            name="h_lb"
         )
+        self._mach[machine].model.addConstrs(
+            (
+                self._mach[machine]._h[s] <= self._mach[machine]._x.sum(S[s])
+                for s in S
+            ),
+            name="h_ub"
+        )
+        self._mach[machine].model.addConstrs(
+            (
+                self._mach[machine]._h[s] == self._mach[machine]._x.sum(S[s])
+                for s in S
+            ),
+            name="h"
+        )
+
         self._mach[machine].model.addConstr(
             self._mach[machine]._pmc == quicksum(PMC[p]*(1-x0[p])*self._mach[machine]._x[p]
                                                  for p in  range(nproc)),
@@ -354,15 +387,32 @@ class CG2(CG):
             name="mmc"
         )
         self._mach[machine].model.addConstr(
-            self._mach[machine]._obj == 
-            self._mach[machine]._mmc +
-            self._mach[machine]._pmc +
-            quicksum(Wlc[r]*self._mach[machine]._lc[r] 
+            -self._mach[machine]._obj + 
+            WMMC*self._mach[machine]._mmc +
+            WPMC*self._mach[machine]._pmc +
+            quicksum(Wlc[r]*self._mach[machine]._d[r] 
                      for r in range(nres))+
             quicksum(Wbal[r1,r2]*self._mach[machine]._b[r1,r2] 
                      for r1 in range(nres)
-                     for r2 in range(nres))
+                     for r2 in range(nres)
+                     )==0
             ,name="roadef_obj")
+
+        self._mach[machine]._pixp_constr = self._mach[machine].model.addConstr(
+            -self._mach[machine]._pixp +
+            quicksum(pi[p]*self._mach[machine]._x[p] for p in range(nproc)) ==0
+            ,name="pixp"
+        )        
+        self._mach[machine]._hsigma_constr = self._mach[machine].model.addConstr(
+            -self._mach[machine]._hsigma +
+            quicksum(sigma[s]*self._mach[machine]._h[s] for s in S) == 0
+            ,name="hsigma"
+        )        
+        self._mach[machine]._ggamma_constr = self._mach[machine].model.addConstr(
+            -self._mach[machine]._ggamma +
+            quicksum(gamma[s]*self._mach[machine]._g[s] for s in S) == 0
+            ,name="ggamma"
+        )        
 
         self._mach[machine].model.update()
 
@@ -374,38 +424,89 @@ class CG2(CG):
         nproc = self._instance.nproc
         nres = self._instance.nres
         nserv = self._instance.nserv
+        S = self._instance.S
 
         for p in range(nproc):
-            self._mach[machine]._x[p].Obj = -pi[p]
+            self._mach[machine].model.chgCoeff(
+                self._mach[machine]._pixp_constr,
+                self._mach[machine]._x[p],
+                pi[p]
+                )
 
         self._mach[machine]._cte.Obj = - mu
 
         for s in range(nserv):
-            self._mach[machine]._s[s].Obj = -sigma[s]
-            self._mach[machine]._g[s].Obj = -gamma[s]
+            self._mach[machine].model.chgCoeff(
+                self._mach[machine]._ggamma_constr,
+                self._mach[machine]._g[s],
+                gamma[s]
+                )
+            self._mach[machine].model.chgCoeff(
+                self._mach[machine]._hsigma_constr,
+                self._mach[machine]._h[s],
+                sigma[s]
+                )
 
         self._mach[machine].model.update()
 
         self._mach[machine].model.reset()
+        self._mach[machine].model.write("%s_%d.lp"%(self._args.run_name,machine))
+        self._mach[machine].model.write("%s_%d.mps"%(self._args.run_name,machine))
 
         self._mach[machine].model.optimize()
+        status = self._mach[machine].model.Status
+        if status == GRB.UNBOUNDED:
+            raise Exception("UNBOUNDED")
 
+        elif status == GRB.INFEASIBLE:
+            self._mach[machine].model.computeIIS()
+            self._mach[machine].model.write("%s_%d.ilp"%(self._args.run_name,machine))
+            raise Exception("INFEASIBLE")
+
+        elif status == GRB.INF_OR_UNBD:
+            self._mach[machine].model.computeIIS()
+            self._mach[machine].model.write("%s_%d.ilp"%(self._args.run_name,machine))
+            model = self._mach[machine].model.copy()
+            __inf_rc = self.__inf(model)
+            
+            raise Exception("INF OR UNBD")
+        
+        self._mach[machine].model.write("%s_%d.sol"%(self._args.run_name,machine))
+           
         q = np.array(
             [1* (self._mach[machine]._x[p].X > .5) for p in range(nproc)], dtype=np.int32
         )
+        z = np.array(
+            [1* (self._mach[machine]._z[p].X > .5) for p in range(nproc)], dtype=np.int32
+        )
 
         serv = np.array(
-            [1* (self._mach[machine]._s[s].X > .5) for s in range(nserv)], dtype=np.int32
+            [1* (self._mach[machine]._h[s].X > .5) for s in S], dtype=np.int32
         )
+        
         g = np.array(
-            [1* (self._mach[machine]._g[s].X > .5) for s in range(nserv)], dtype=np.int32
+            [1* (self._mach[machine]._g[s].X > .5) for s in S], dtype=np.int32
         )
-
+        _d = np.array([self._mach[machine]._d[r].X for r in range(nres)])
         return CGColumn(rc=self._mach[machine].model.objVal,
-                      obj=round(self._mach[machine]._obj.X),
-                      procs=q,
-                      servs=serv,
-                      g=g)
+                        obj=round(self._mach[machine]._obj.X),
+                        procs=q,
+                        servs=serv,
+                        g=g,
+                        z=z,
+                        hsigma = self._mach[machine]._hsigma.X,
+                        ggamma = self._mach[machine]._ggamma.X,
+                        pixp = self._mach[machine]._pixp.X,
+                        u = np.array([round(self._mach[machine]._u[r].X) for r in range(nres)],dtype=np.int32),
+                        ut = np.array([round(self._mach[machine]._ut[r].X) for r in range(nres)],dtype=np.int32),
+                        
+                        a = np.array([round(self._mach[machine]._a[r].X) for r in range(nres)],dtype=np.int32),
+                        
+                        d = _d,
+                        b = np.array([[round(self._mach[machine]._b[r1,r2].X) for r2 in range(nres)] for r1 in range(nres)],dtype=np.int32),
+                        pmc = self._mach[machine]._pmc.X,
+                        mmc = self._mach[machine]._mmc.X
+                        )
                       
 
     def solve_relax(self):
@@ -415,6 +516,7 @@ class CG2(CG):
         if not self._lp:
             raise Exception("LP model not defined")
 
+        
         self._lp.optimize()
 
         s = self._lp.Status
@@ -478,11 +580,207 @@ class CG2(CG):
                         
         
 
-    def solve(self):
-        pass
 
     def solve_lp(self):
         if not self._lp:
             raise Exception("LP model not defined")
         pass
 
+
+    def validate_column(self, colres, machine,pi, mu, sigma, gamma):
+        return self.__validate_column(colres, machine,pi, mu, sigma, gamma)
+
+    def __validate_column(self, colres, machine,pi, mu, sigma, gamma):
+
+        nproc = self._instance.nproc
+        nres = self._instance.nres
+        nserv = self._instance.nserv
+        R = self._instance.R
+        T = self._instance.T
+        C = self._instance.C[machine]
+        SC = self._instance.SC[machine]
+        S = self._instance.S
+        SM = self._instance.SM
+        bT = self._instance.bT
+        PMC = self._instance.PMC
+        MMC = self._instance.MMC[self._instance.assign(),machine]
+        Wlc = self._instance.Wlc
+        Wbal = self._instance.Wbal
+        WPMC = self._instance.WPMC
+        WMMC = self._instance.WMMC
+
+        x0 = self._instance.mach_map_assign(machine).reshape(1,nproc)
+
+        _x = colres.procs.reshape(1,nproc)
+
+        for s in S:
+            if colres.procs[S[s]].sum() >1:
+                print("conflict!")
+                return CGValidate(status=CGValidateStatus.Invalid)
+
+        _h = _x.dot(SM)
+
+        if np.any(_h!=colres.servs):
+            print(" services doesn`t match")
+            print(_h)
+            print(colres.servs)
+            return CGValidate(status=CGValidateStatus.Invalid)
+            
+
+        _z = x0 - _x
+        _z[_z < 0] = 0
+
+        if np.any(_z!=colres.z):
+            print(" migration doesn`t match")
+            print(_z)
+            print(colres.z)
+            print("x0")
+            print(x0)
+            print("x0 - x ")
+            print(x0 -_x )
+            print(_z - colres.z)
+            return CGValidate(status=CGValidateStatus.Invalid)
+
+        
+        _g = _z.dot(SM)
+
+        if np.any(_g!=colres.g):
+            print(" services doesn`t match")
+            print(_g)
+            print(colres.g)
+            return CGValidate(status=CGValidateStatus.Invalid)
+            
+        
+        
+        _u = (_x.dot(R)).sum(axis=0)
+        
+        if np.any(abs(_u - colres.u) > self._args.epslon):
+            print("u[r] mismatch")
+            print(_u)
+            print(colres.u)
+            
+        _ut = (T*_z.dot(R)).sum(axis=0)
+        
+        if np.any(abs(_ut - colres.ut) > self._args.epslon):
+            print("ut[r] mismatch")
+            print(_ut)
+            print(colres.ut)
+
+        if any(_u + _ut >C):
+            print("Over capacity!")
+            return CGValidate(status=CGValidateStatus.Invalid)
+
+        _a = C - _u
+        if np.any(abs(_a - colres.a) > self._args.epslon):
+            print("a[r] mismatch")
+            print(_a)
+            print(colres.a)
+
+        
+        _d = _u - SC
+        _d[_d < 0 ] = 0
+
+        if np.any(abs(_d - colres.d) > self._args.epslon):
+            print("d[r] mismatch")
+            print(_u)
+            print(colres.u)
+            print(SC)
+            print(_d)
+            print(colres.d)
+            print(Wlc)
+        
+        _b = np.empty((nres,nres),dtype=np.int32)
+
+        for r1 in range(nres):
+            for r2 in range(nres):
+                _b[r1,r2] = bT[r1,r2]*_a[r1] - _a[r2]
+
+        _b[_b<0] = 0
+        
+        _pmc = (_x*PMC).reshape(nproc)
+        _pmc[x0.reshape(nproc) == 1] = 0
+
+        _mmc = (_x*MMC).reshape(nproc)
+        _mmc[x0.reshape(nproc) == 1] = 0
+
+        _obj = (_d*Wlc).sum() + (_b*Wbal).sum() +WPMC*(_pmc.sum()) + WMMC*(_mmc.sum())
+        _pixp = _x.dot(pi).sum()
+        _hsigma = _h.dot(sigma).sum()
+        _ggamma = _g.dot(gamma).sum()
+        _rc = _obj - _pixp  - _hsigma  - _ggamma - mu
+        
+        if abs(_rc - colres.rc) > self._args.epslon:
+            print("RC")
+            print(_rc)
+            print(colres.rc)
+            print(mu)
+            if abs(_obj - colres.obj) > self._args.epslon:
+                print("obj")
+                print(_obj)
+                print(colres.obj)
+            if abs( _hsigma - colres.hsigma) > self._args.epslon:
+                print("h*sigma")
+                print(_hsigma)
+                print(colres.hsigma)
+            if abs( _pixp - colres.pixp) > self._args.epslon:
+                print("pi*x")
+                print(_pixp)
+                print(colres.pixp)
+                
+            if abs( _ggamma - colres.ggamma) > self._args.epslon:
+                print("g*gamma")
+                print(_ggamma)
+                print(colres.ggamma)
+            
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
+
+        return CGValidate(status=CGValidateStatus.Valid)
+
+
+    def lp2mip(self):
+        self.__lp2mip()
+
+    def __lp2mip(self):
+        self._mip = self._lp
+
+        for v in self._mip.getVars():
+            v.vtype = GRB.INTEGER
+
+        for m in range(self._instance.nmach):
+            self._lbd[m,0].Start=1
+            
+
+    def __inf(self,model):
+
+        orignumvars = model.NumVars
+
+        model.feasRelaxS(0, False, False, True)
+
+        model.optimize()
+        status = model.status
+
+        if status in (GRB.Status.INF_OR_UNBD, GRB.Status.INFEASIBLE, GRB.Status.UNBOUNDED):
+            print('The relaxed model cannot be solved \
+            because it is infeasible or unbounded')
+            return False
+        if status != GRB.Status.OPTIMAL:
+            print('Optimization was stopped with status %d' % status)
+            return False
+
+        print('\nSlack values:')
+
+        model.write("Infeasible.lp")
+        slacks = model.getVars()[orignumvars:]
+        for sv in slacks:
+            if sv.X > 1e-6:
+                print('%s = %g' % (sv.VarName, sv.X))
+        # conflict[4]: x[8] + x[23] + x[64] + x[99] - h[4] + ArtP_conflict[4] - ArtN_conflict[4] = 0
+
+        for varname in [ "x[8]", "x[23]", "x[64]", "x[99]","h[4]" ]:
+            v = model.getVarByName(varname)
+            print('%s = %g' % (v.VarName, v.X))
+            
+
+        return True
+
+        

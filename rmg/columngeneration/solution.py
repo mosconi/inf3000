@@ -1,6 +1,24 @@
 
 from collections import namedtuple
+from enum import Enum
 
 RelaxSolution = namedtuple('RelaxSolution',['obj','pi','mu','eta_lb','eta_ub','gamma','omikron_lb','omikron_ub'])
 
-CGColumn = namedtuple('CGColumn',['rc','obj','procs','g','servs'])
+CGColumn = namedtuple('CGColumn',['rc','obj','procs','g','servs','z','hsigma','ggamma','pixp','u','ut','a','d','b','pmc','mmc'])
+
+CGValidate = namedtuple('CGValidate',['status'])
+
+CGAdd = namedtuple('CGAdd',['status','var'])
+
+CGSolution = namedtuple('CGSolution',['obj','X','assign'])
+
+class CGValidateStatus(Enum):
+    Valid = 1
+    CalcMismatch = 2
+    Invalid = 3
+
+
+class CGAddStatus(Enum):
+    Added = 1
+    Exist = 2
+    NotAdded = 3

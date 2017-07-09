@@ -6,7 +6,7 @@ from time import time
 
 from rmg import roadef,common,instance,columngeneration
 from rmg.instance import Instance
-import rmg.columngeneration as cg
+import rmg.columngeneration as CG
 from gurobipy import tupledict
 
 parser = argparse.ArgumentParser(description="",
@@ -33,7 +33,7 @@ np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x:
 
 inst = Instance(args)
 
-cg = cg.CG2(instance=inst,args=args)
+cg = CG.CG2(instance=inst,args=args)
 
 cg.build_lpmodel()
 
@@ -58,7 +58,6 @@ alpha = .5
 continue_cond = True
 
 while continue_cond:
-
     cg.lpwrite()
 
     res = cg.solve_relax()
@@ -75,28 +74,54 @@ while continue_cond:
     omikron_ub = alpha * best_omikron_ub + (1 - alpha) * res.omikron_ub
     
     for m in range(inst.nmach):
+        print(k,m)
+        
         sigma = eta_lb[:,m] + eta_ub[:,inst.iN[m]] + omikron_lb[:,m] + omikron_ub[:,inst.iL[m]]
 
-        cres = cg.compute_column(m,pi = pi,
+        cres = cg.compute_column(machine = m,
+                                 pi = pi,
                                  gamma = gamma,
                                  sigma = sigma,
                                  mu = mu[m])
 
         if cres is None:
             raise Exception("problema ao calcular coluna")
-            
+        
+        vres = cg.validate_column(cres,
+                                  machine = m,
+                                  pi = pi,
+                                  gamma = gamma,
+                                  sigma = sigma,
+                                  mu = mu[m])
 
+        if vres.status != CG.CGValidateStatus.Valid:
+            print(vres)
+            raise Exception("problema ao validar coluna")
+        
         omega += cres.rc
-        cg.lp_add_col(m,cres)
+        ares = cg.lp_add_col(m,cres)
+
+        if ares.status != CG.CGAddStatus.Added:
+            print(ares)
+            raise Exception("problema ao adicionar coluna")
+
+
+    if omega > - args.epslon:
+        continue_cond = False
+        break
+        
     
     k+=1
-    if k >= 4:
+    if k >= 4 and False:
         continue_cond = False
     
 cg.lpwrite()
-sys.exit(0)
+
+cg.lp2mip()
 
 solution = cg.solve()
+
+#print(solution)
 
 
 print(' '.join(str(i) for i in solution.assign))

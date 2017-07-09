@@ -1,6 +1,8 @@
 
+#from collection import defaultdict
+from .solution import CGSolution
 from gurobipy import Env
-
+import numpy as np
 
 class CG(object):
     _instance = None
@@ -8,6 +10,7 @@ class CG(object):
     _mip = None
     _lp = None
     _env = None
+    _procs = None
     
     def __init__(self,instance,args):
         self._args = args
@@ -18,8 +21,10 @@ class CG(object):
             self._env=Env("columngeneration.log")
 
         self._mach=dict()
+        self._procs=dict()
         for m in range(instance.nmach):
             self._mach[m]=lambda: None
+            #self._procs[m]= defaultdict(int)
 
     def __del__(self):
         for m in range(self._instance.nmach):
@@ -73,7 +78,23 @@ class CG(object):
 
 
     def solve(self):
-        pass
+        if not self._mip:
+            raise Exception("MIP Model not defined")
 
+        self._mip.optimize()
+        _obj = self._mip.ObjVal
+
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+
+        x = np.zeros((nproc,nmach),dtype=np.int32)
+        assign = np.empty(nproc,dtype=np.int32)
+        for m in range(nmach):
+            v = [ v for v in self._lbd.select(m,'*')  if v.X>0 ][0]
+            x[:,m] = v._procs
+            assign[v._procs==1] = m
+
+        return CGSolution(obj = _obj, X=x, assign = assign)
+        
     def solve_lp(self):
         pass

@@ -39,7 +39,7 @@ class Instance:
 
         self.nres = nres
 
-        self.T=np.zeros(self.nres,dtype=np.bool)
+        self.T=np.zeros(self.nres,dtype=np.int32)
         self.Wlc=np.zeros(self.nres,dtype=np.int32)
 
 
@@ -98,12 +98,15 @@ class Instance:
         self.nproc = nproc
 
         self.S=defaultdict(list)
+        self.SM = np.zeros((self.nproc,self.nserv),dtype=np.int32)
         self.R=np.zeros((self.nproc,self.nres),dtype=np.int32)
         self.PMC=np.zeros(self.nproc,dtype=np.int32)
         
         for p in range(nproc):
             l = lines.pop(0)
-            self.S[l.pop(0)].append(p)
+            s = l.pop(0)
+            self.S[s].append(p)
+            self.SM[p,s]=1
             self.R[p]=l[:nres]
             del(l[:nres])
             self.PMC[p]=l[0]
@@ -197,7 +200,7 @@ class Instance:
             'moved_proc': moved_procs
         }
 
-        return True
+        return (True, (self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum() )
 
     def mach_objective(self, machine = None, map_assign = None):
         if machine is None:
