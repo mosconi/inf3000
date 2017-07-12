@@ -94,9 +94,9 @@ while continue_cond:
                                   sigma = sigma,
                                   mu = mu[m])
 
-        #if vres.status != CG.CGValidateStatus.Valid:
-        #    print(vres)
-        #    raise Exception("problema ao validar coluna")
+        if vres.status != CG.CGValidateStatus.Valid:
+            print(vres)
+            raise Exception("problema ao validar coluna")
         
         omega += cres.rc
         ares = cg.lp_add_col(m,cres)

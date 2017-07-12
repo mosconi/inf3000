@@ -971,6 +971,9 @@ class CG5:
         if file is not None:
             self.__mip.write(file)
 
+        self.__mip.tune()
+        self.__mip.write("CG_MIP.prm")
+            
         self.__mip.optimize(_cb2)
         _print_backspace()
 

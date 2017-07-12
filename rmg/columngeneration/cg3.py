@@ -382,6 +382,7 @@ class CG3(CG):
         nres = self._instance.nres
         nserv = self._instance.nserv
         S = self._instance.S
+        x0 = self._instance.mach_map_assign(machine)
 
         for p in range(nproc):
             self._mach[machine].model.chgCoeff(
@@ -392,17 +393,23 @@ class CG3(CG):
 
         self._mach[machine]._cte.Obj = - mu
 
-        # for s in range(nserv):
-        #     self._mach[machine].model.chgCoeff(
-        #         self._mach[machine]._ggamma_constr,
-        #         self._mach[machine]._g[s],
-        #         gamma[s]
-        #         )
-        #     self._mach[machine].model.chgCoeff(
-        #         self._mach[machine]._hsigma_constr,
-        #         self._mach[machine]._h[s],
-        #         sigma[s]
-        #         )
+        g_acc =0
+        for s in S:
+            for p in S[s]:
+                if x0[p] ==1:
+                    self._mach[machine].model.chgCoeff(
+                        self._mach[machine]._ggamma_constr,
+                        self._mach[machine]._x[p],
+                        -gamma[s]
+                    )
+                    g_acc += gamma[s]
+                self._mach[machine].model.chgCoeff(
+                    self._mach[machine]._hsigma_constr,
+                    self._mach[machine]._x[p],
+                    sigma[s]
+                )
+             
+        self._mach[machine]._ggamma_constr = g_acc
 
         self._mach[machine].model.update()
 
@@ -433,14 +440,29 @@ class CG3(CG):
         q = np.array(
             [1* (self._mach[machine]._x[p].X > .5) for p in range(nproc)], dtype=np.int32
         )
+
+        z = np.zeros(nproc,dtype = np.int32)
+        for p in range(nproc):
+            if x0[p] == 1:
+                z[p] = round(1-self._mach[machine]._x[p].X)
         # z = np.array(
         #     [1* (self._mach[machine]._z[p].X > .5) for p in range(nproc)], dtype=np.int32
         # )
 
+        serv = np.zeros(nserv,dtype = np.int32)
+        for s in S:
+            serv[s] = sum([round(1-self._mach[machine]._x[p].X) for p in S[s]])
+       
         # serv = np.array(
         #     [1* (self._mach[machine]._x[p].X > .5) for s in S], dtype=np.int32
         # )
-        
+
+        g = np.zeros(nserv,dtype = np.int32)
+        for s in S:
+            for p in S[s]:
+                if x0[p] == 1:
+                    g[s] = round(1-self._mach[machine]._x[p].X)
+                    break
         # g = np.array(
         #     [1* (self._mach[machine]._g[s].X > .5) for s in S], dtype=np.int32
         # )
@@ -448,9 +470,9 @@ class CG3(CG):
         return CGColumn(rc=self._mach[machine].model.objVal,
                         obj=round(self._mach[machine]._obj.X),
                         procs=q,
-                        servs=None,
-                        g=None,
-                        z=None,
+                        servs=serv,
+                        g=g,
+                        z=z,
                         hsigma = self._mach[machine]._hsigma.X,
                         ggamma = self._mach[machine]._ggamma.X,
                         pixp = self._mach[machine]._pixp.X,

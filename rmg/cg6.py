@@ -28,7 +28,7 @@ if args.name:
     sys.exit(0)
 
 rows, columns = os.popen('stty size', 'r').read().split()
-np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+17.3f" % x,'int': lambda x: "%+20d" % x, })
+np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+17.3f" % x,'int': lambda x: "%+17d" % x, })
 
 
 inst = Instance(args)

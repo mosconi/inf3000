@@ -342,7 +342,7 @@ class CG2(CG):
             
         self._mach[machine].model.addConstrs(
             (
-                 self._mach[machine]._d[r] >= self._mach[machine]._u[r] -  SC[r]
+                 self._mach[machine]._u[r] -  self._mach[machine]._d[r] <= SC[r]
                 for r in range(nres)),
             name="load"
         )
@@ -376,13 +376,13 @@ class CG2(CG):
             ),
             name="h_ub"
         )
-        self._mach[machine].model.addConstrs(
-            (
-                self._mach[machine]._h[s] == self._mach[machine]._x.sum(S[s])
-                for s in S
-            ),
-            name="h"
-        )
+        # self._mach[machine].model.addConstrs(
+        #     (
+        #         self._mach[machine]._h[s] == self._mach[machine]._x.sum(S[s])
+        #         for s in S
+        #     ),
+        #     name="h"
+        # )
 
         self._mach[machine].model.addConstr(
             self._mach[machine]._pmc == quicksum(PMC[p]*(1-x0[p])*self._mach[machine]._x[p]
@@ -623,7 +623,7 @@ class CG2(CG):
 
         for s in S:
             if colres.procs[S[s]].sum() >1:
-                print("conflict!")
+                print(" conflict failed!")
                 return CGValidate(status=CGValidateStatus.Invalid)
 
         _h = _x.dot(SM)
@@ -653,7 +653,7 @@ class CG2(CG):
         _g = _z.dot(SM)
 
         if np.any(_g!=colres.g):
-            print(" services doesn`t match")
+            print(" migrate services doesn`t match")
             print(_g)
             print(colres.g)
             return CGValidate(status=CGValidateStatus.Invalid)
@@ -664,8 +664,13 @@ class CG2(CG):
         
         if np.any(abs(_u - colres.u) > self._args.epslon):
             print("u[r] mismatch")
+            print(" u (calc):")
             print(_u)
+            print(" u (grb):")
             print(colres.u)
+            print(" u (delta):")
+            print(_u - colres.u)
+            
             
         _ut = (T*_z.dot(R)).sum(axis=0)
         
@@ -683,19 +688,28 @@ class CG2(CG):
             print("a[r] mismatch")
             print(_a)
             print(colres.a)
-
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
         
         _d = _u - SC
         _d[_d < 0 ] = 0
 
         if np.any(abs(_d - colres.d) > self._args.epslon):
             print("d[r] mismatch")
+            print(" u (calc):")
             print(_u)
+            print(" u (grb):")
             print(colres.u)
+            print(" SC:")
             print(SC)
+            print(" d (calc):")
             print(_d)
+            print(" d (calc):")
             print(colres.d)
+            print(" d (delta):")
+            print(_d - colres.d)
+            print(" WLc")
             print(Wlc)
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
         
         _b = np.empty((nres,nres),dtype=np.int32)
 
@@ -712,33 +726,56 @@ class CG2(CG):
         _mmc[x0.reshape(nproc) == 1] = 0
 
         _obj = (_d*Wlc).sum() + (_b*Wbal).sum() +WPMC*(_pmc.sum()) + WMMC*(_mmc.sum())
-        _pixp = _x.dot(pi).sum()
-        _hsigma = _h.dot(sigma).sum()
-        _ggamma = _g.dot(gamma).sum()
-        _rc = _obj - _pixp  - _hsigma  - _ggamma - mu
+        if abs(_obj - colres.obj) > self._args.epslon:        
+            print(" OBJ")
+            print(" obj (calc):")
+            print(_obj)
+            print(" obj (grb):")
+            print(colres.obj)
+            print(" obj (delta)")
+            print(_obj - colres.obj)
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
         
+        _pixp = _x.dot(pi).sum()
+        if abs( _pixp - colres.pixp) > self._args.epslon:
+            print("pi*x")
+            print(_pixp)
+            print(colres.pixp)
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
+        
+        _hsigma = _h.dot(sigma).sum()
+        if abs( _hsigma - colres.hsigma) > self._args.epslon:
+            print("  h*sigma")
+            print("  h*sigma (calc):")
+            print(_hsigma)
+            print("  h*sigma (calc):")
+            print(colres.hsigma)
+            print("  h*sigma (delta):")
+            print(_hsigma - colres.hsigma)
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
+
+        _ggamma = _g.dot(gamma).sum()
+        if abs( _ggamma - colres.ggamma) > self._args.epslon:
+            print("g*gamma")
+            print(_ggamma)
+            print(colres.ggamma)
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
+
+        _rc = _obj - _pixp  - _hsigma  - _ggamma - mu
         if abs(_rc - colres.rc) > self._args.epslon:
             print("RC")
+            print(" rc (calc):")
             print(_rc)
+            print(" rc (grb):")
             print(colres.rc)
+            print(" rc (delta):")
+            print(_rc - colres.rc)
+            print(" mu:")
             print(mu)
-            if abs(_obj - colres.obj) > self._args.epslon:
-                print("obj")
-                print(_obj)
-                print(colres.obj)
-            if abs( _hsigma - colres.hsigma) > self._args.epslon:
-                print("h*sigma")
-                print(_hsigma)
-                print(colres.hsigma)
-            if abs( _pixp - colres.pixp) > self._args.epslon:
-                print("pi*x")
-                print(_pixp)
-                print(colres.pixp)
+            return CGValidate(status=CGValidateStatus.CalcMismatch)
+
+    
                 
-            if abs( _ggamma - colres.ggamma) > self._args.epslon:
-                print("g*gamma")
-                print(_ggamma)
-                print(colres.ggamma)
             
             return CGValidate(status=CGValidateStatus.CalcMismatch)
 
@@ -762,14 +799,13 @@ class CG2(CG):
 
         orignumvars = model.NumVars
 
-        model.feasRelaxS(0, False, False, True)
+        model.feasRelaxS(0, False, True, False)
 
         model.optimize()
         status = model.status
 
         if status in (GRB.Status.INF_OR_UNBD, GRB.Status.INFEASIBLE, GRB.Status.UNBOUNDED):
-            print('The relaxed model cannot be solved \
-            because it is infeasible or unbounded')
+            print('The relaxed model cannot be solved because it is infeasible or unbounded')
             return False
         if status != GRB.Status.OPTIMAL:
             print('Optimization was stopped with status %d' % status)
@@ -779,9 +815,21 @@ class CG2(CG):
 
         model.write("Infeasible.lp")
         slacks = model.getVars()[orignumvars:]
+        nslacks = model.getVars()[:orignumvars]
+        constrs = model.getConstrs()
+        v_constrs = []
         for sv in slacks:
             if sv.X > 1e-6:
                 print('%s = %g' % (sv.VarName, sv.X))
+                for c in constrs:
+                    if model.getCoeff(c,sv) > 1e-6:
+                        v_constrs.append(c)
+
+        for c in v_constrs:
+            print(c)
+            for v in nslacks:
+                if model.getCoeff(c,v) > 1e-6:
+                    print('%s = %g' % (v.VarName, v.X))
         # conflict[4]: x[8] + x[23] + x[64] + x[99] - h[4] + ArtP_conflict[4] - ArtN_conflict[4] = 0
 
 #        for varname in [ "x[8]", "x[23]", "x[64]", "x[99]","h[4]" ]:
