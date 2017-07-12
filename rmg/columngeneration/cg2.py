@@ -241,11 +241,18 @@ class CG2(CG):
         self._mach[machine]._x = self._mach[machine].model.addVars(nproc,
                                                                    vtype=GRB.BINARY,name="x")
 
+        for p in range(nproc):
+            self._mach[machine]._x[p].Start = x0[p]
+
         self._mach[machine]._z = self._mach[machine].model.addVars(nproc,ub=x0,
                                                                    vtype=GRB.BINARY,name="z")
+        for p in range(nproc):
+            self._mach[machine]._z[p].Start = 0
 
         self._mach[machine]._g = self._mach[machine].model.addVars(nserv,
                                                                    vtype=GRB.BINARY,name="g")  # serviço migrado
+        for s in S:
+            self._mach[machine]._g[s].Start = 0
 
         self._mach[machine]._u = self._mach[machine].model.addVars(nres,
                                                                    vtype=GRB.INTEGER,lb=0,ub=C,name="u")
@@ -265,6 +272,8 @@ class CG2(CG):
         # serve tanto para h[s,n], h[s,n,m] e o[s,l] o[s,l,m]
         self._mach[machine]._h = self._mach[machine].model.addVars(nserv,
                                                                    vtype=GRB.BINARY,name="h") # serviço presente
+        for s in S:
+            self._mach[machine]._h[s].Start = x0[S[s]].sum()
 
 
         self._mach[machine]._pmc = self._mach[machine].model.addVar(vtype=GRB.INTEGER,
@@ -286,15 +295,14 @@ class CG2(CG):
 
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._z[p] == 
-                x0[p] *(1 - self._mach[machine]._x[p])
-                for p in range(nproc)),
+                self._mach[machine]._z[p] + self._mach[machine]._x[p] == 1
+                for p in range(nproc)  if x0[p]==1),
             name="z"
         )
 
         self._mach[machine].model.addConstrs(
             (
-                self._mach[machine]._g[s] == quicksum(self._mach[machine]._z[p] for p in S[s])
+                self._mach[machine]._g[s] == quicksum(x0[p]*self._mach[machine]._z[p] for p in S[s])
                 for s in S),
             name="g"
         )
@@ -396,7 +404,7 @@ class CG2(CG):
                      for r1 in range(nres)
                      for r2 in range(nres)
                      )==0
-            ,name="roadef_obj")
+            ,name="cost")
 
         self._mach[machine]._pixp_constr = self._mach[machine].model.addConstr(
             -self._mach[machine]._pixp +
@@ -776,9 +784,9 @@ class CG2(CG):
                 print('%s = %g' % (sv.VarName, sv.X))
         # conflict[4]: x[8] + x[23] + x[64] + x[99] - h[4] + ArtP_conflict[4] - ArtN_conflict[4] = 0
 
-        for varname in [ "x[8]", "x[23]", "x[64]", "x[99]","h[4]" ]:
-            v = model.getVarByName(varname)
-            print('%s = %g' % (v.VarName, v.X))
+#        for varname in [ "x[8]", "x[23]", "x[64]", "x[99]","h[4]" ]:
+#            v = model.getVarByName(varname)
+#            print('%s = %g' % (v.VarName, v.X))
             
 
         return True

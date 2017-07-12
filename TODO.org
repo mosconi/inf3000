@@ -10,6 +10,7 @@
 ** CG
 *** Métodos de estabilizção
 **** Livre
+**** box
 **** Constante
 **** Linear
 **** Razão de RC
