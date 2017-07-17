@@ -832,7 +832,7 @@ class CG2(CG):
                    np.amax(Wlc),
                    np.amax(WPMC),
                    np.amax(WMMC)]) )
-            if  (_obj - colres.obj) > max([np.amax(Wbal),
+            if  (_obj - colres.obj)*1.0/_obj > max([np.amax(Wbal),
                    np.amax(Wlc),
                    np.amax(WPMC),
                    np.amax(WMMC)]) * self._args.tol:
