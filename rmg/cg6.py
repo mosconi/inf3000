@@ -4,8 +4,8 @@ import argparse,os,sys
 import numpy as np
 from time import time
 
-from rmg import roadef,common,instance,columngeneration
-from rmg.instance import Instance
+from rmg import roadef,common,instance,Instance,columngeneration
+
 import rmg.columngeneration as CG
 from gurobipy import tupledict
 
@@ -23,8 +23,12 @@ parser = argparse.ArgumentParser(description="",
 
 args = parser.parse_args()
 
+if args.verbose is None:
+    args.verbose = 1
+
 if args.name:
     print("Rodrigo Mosconi (1512344) <rmosconi@inf.puc-rio.br>")
+    print(args)
     sys.exit(0)
 
 rows, columns = os.popen('stty size', 'r').read().split()
@@ -40,7 +44,6 @@ cg.build_lpmodel()
 for m in range(inst.nmach):
     cg.build_column_model(m)
 
-omega=0
 k=0
 impr=0
 best_zrm = + np.inf
@@ -53,14 +56,28 @@ best_eta_ub = np.zeros((inst.nserv,len(inst.N)),dtype=np.float64)      # Dual de
 best_omikron_lb = np.zeros((inst.nserv,inst.nmach),dtype=np.float64)   # Dual de o[s,l,m]
 best_omikron_ub = np.zeros((inst.nserv,len(inst.L)),dtype=np.float64)  # Dual de o[s,l]
 
-alpha = .5
+alpha = 0
 
 continue_cond = True
 
+res = cg.solve_relax()
+first_obj = res.obj
+
+
 while continue_cond:
-    cg.lpwrite()
+    if args.verbose >1:
+        print("-"*78)
+        print("%5d master" % (k),end=' ',flush=True)
+
+    r_start = time()
+    if args.dump:
+        cg.lpwrite(k)
 
     res = cg.solve_relax()
+    r_stop = time()
+
+    if args.verbose >1:
+        print("%20.3f %20.3f %8.3f (%8.3f) %20.3f" % (res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
     
     if res is None:
         raise Exception("LP não ótimo")
@@ -72,59 +89,84 @@ while continue_cond:
     eta_ub = alpha * best_eta_ub + (1 - alpha) * res.eta_ub
     omikron_lb = alpha * best_omikron_lb + (1 - alpha) * res.omikron_lb
     omikron_ub = alpha * best_omikron_ub + (1 - alpha) * res.omikron_ub
-    
+
+    omega = 0
+    add_col = False
+
     for m in range(inst.nmach):
-        print(k,m)
-        
+        if args.verbose>1:
+            print("%5d  %5d" % (k,m),end=' ',flush=True)
+
+        c_start = time()
         sigma = eta_lb[:,m] + eta_ub[:,inst.iN[m]] + omikron_lb[:,m] + omikron_ub[:,inst.iL[m]]
 
-        cres = cg.compute_column(machine = m,
-                                 pi = pi,
-                                 gamma = gamma,
-                                 sigma = sigma,
-                                 mu = mu[m])
+        cg.column_prepare(machine = m,
+                          pi = pi,
+                          gamma = gamma,
+                          sigma = sigma,
+                          mu = mu[m])
+        if args.dump:
+            cg.column_write(machine = m, k = k)
+        
+        cres = cg.column_compute(machine = m)
 
+        c_stop = time()
         if cres is None:
             raise Exception("problema ao calcular coluna")
-        
-        vres = cg.validate_column(cres,
-                                  machine = m,
-                                  pi = pi,
-                                  gamma = gamma,
-                                  sigma = sigma,
-                                  mu = mu[m])
 
-        if vres.status != CG.CGValidateStatus.Valid:
-            print(vres)
-            raise Exception("problema ao validar coluna")
+
+        if args.dump:
+            cg.column_writesol(machine = m, k = k)
+
+        if args.validate:
+            vres = cg.column_validate(cres,
+                                      machine = m,
+                                      pi = pi,
+                                      gamma = gamma,
+                                      sigma = sigma,
+                                      mu = mu[m])
+
+            if vres.status != CG.CGValidateStatus.Valid:
+                print(vres)
+                raise Exception("problema ao validar coluna")
         
         omega += cres.rc
         ares = cg.lp_add_col(m,cres)
 
-        if ares.status != CG.CGAddStatus.Added:
+        if ares.status == CG.CGAddStatus.Added:
+            add_col = True
+            
+        elif ares.status == CG.CGAddStatus.NotAdded:
             print(ares)
             raise Exception("problema ao adicionar coluna")
-
-
-    if omega > - args.epslon:
-        continue_cond = False
-        break
         
-    
+        if args.verbose>1:
+            print("%20.3f %20.3f %8.3f (%8.3f) %s" %(cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value ) )
+        
+    if args.verbose>1:
+        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,best_omega, time() - r_start , 0),end=' ')
+        
+    if omega > - args.epslon or not add_col:
+        continue_cond = False
+
     k+=1
     if k >= 4 and False:
         continue_cond = False
-    
-cg.lpwrite()
 
+    if continue_cond:
+        print("C")
+    else:
+        print("T")
+        
 cg.lp2mip()
 
 solution = cg.solve()
 
 #print(solution)
 
-
-print(' '.join(str(i) for i in solution.assign))
+if args.verbose>0:
+    print(' '.join(str(i) for i in inst.assign()))
+    print(' '.join(str(i) for i in solution.assign))
 
 if args.new_solution_filename:
     args.new_solution_filename.write(' '.join(str(i) for i in solution.assign))

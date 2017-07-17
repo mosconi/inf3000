@@ -177,7 +177,7 @@ class MIP2(MIP):
                               for r2 in range(nres)                              
                               ),name="bc")
 
-        self._mip.addConstr(self._pmc == quicksum(PMC[p]*self._z.sum(p,'*')
+        self._mip.addConstr(self._pmc == quicksum(self._z.sum(p,'*')*PMC[p]
                                                   for p in range(nproc)),
                             name="pmc")
         

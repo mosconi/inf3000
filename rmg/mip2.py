@@ -39,6 +39,7 @@ mip.write()
 
 solution = mip.solve()
 
+print(' '.join(str(i) for i in inst.assign()))
 print(' '.join(str(i) for i in solution.assign))
 
 if args.new_solution_filename:

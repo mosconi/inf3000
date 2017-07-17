@@ -15,10 +15,7 @@ class CG(object):
     def __init__(self,instance,args):
         self._args = args
         self._instance = instance
-        if args.logfile:
-            self._env=Env(args.logfile)
-        else:
-            self._env=Env("columngeneration.log")
+        self._env=Env(args.logfile)
 
         self._mach=dict()
         self._procs=dict()
@@ -91,8 +88,9 @@ class CG(object):
         assign = np.empty(nproc,dtype=np.int32)
         for m in range(nmach):
             v = [ v for v in self._lbd.select(m,'*')  if v.X>0 ][0]
-            x[:,m] = v._procs
-            assign[v._procs==1] = m
+            p = np.array(v._procs).flatten()
+            x[:,m] = p
+            assign[p==1] = m
 
         return CGSolution(obj = _obj, X=x, assign = assign)
         
