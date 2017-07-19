@@ -39,34 +39,37 @@ inst = Instance(args)
 
 cg = CG.CG2(instance=inst,args=args)
 
+if args.verbose >3:
+    print("building LP Model")
+
 cg.build_lpmodel()
 
 for m in range(inst.nmach):
+    if args.verbose >3:
+        print(" building machine %5d (of %5d) MIP model" % (m,inst.nmach))
     cg.build_column_model(m)
+    if args.generate:
+        for p in range(inst.nproc):
+            m_assign = inst.mach_map_assign(m).copy()
+            m_assign[p] = not m_assign[p]
+            if inst.mach_validate(machine=m,map_assign=m_assign):
+                pass
 
-k=0
-impr=0
-best_zrm = + np.inf
-best_omega = - np.inf
-best_pi = np.zeros(inst.nproc,dtype=np.float64)                        # Duais de processos
-best_mu = np.zeros(inst.nmach,dtype=np.float64)                        # Duais de máquina
-best_gamma = np.zeros(inst.nserv,dtype=np.float64)                     # Duais de serviço migrado
-best_eta_lb = np.zeros((inst.nserv,inst.nmach),dtype=np.float64)       # Dual de h[s,n,m]
-best_eta_ub = np.zeros((inst.nserv,len(inst.N)),dtype=np.float64)      # Dual de h[s,n]
-best_omikron_lb = np.zeros((inst.nserv,inst.nmach),dtype=np.float64)   # Dual de o[s,l,m]
-best_omikron_ub = np.zeros((inst.nserv,len(inst.L)),dtype=np.float64)  # Dual de o[s,l]
 
-alpha = 0
-
+            
 continue_cond = True
 
 res = cg.solve_relax()
 first_obj = res.obj
 
+stab = CG.Stabilization(inst, args)
 
+alpha = stab.alpha0()
+
+k = 0
 while continue_cond:
     if args.verbose >1:
-        print("-"*78)
+        print("-"*(int(columns)-2))
         print("%5d master" % (k),end=' ',flush=True)
 
     r_start = time()
@@ -81,15 +84,9 @@ while continue_cond:
     
     if res is None:
         raise Exception("LP não ótimo")
+    
 
-    pi = alpha * best_pi + (1 - alpha) * res.pi
-    mu = alpha * best_mu + (1 - alpha) * res.mu
-    gamma = alpha * best_gamma + (1 - alpha) * res.gamma
-    eta_lb = alpha * best_eta_lb + (1 - alpha) * res.eta_lb
-    eta_ub = alpha * best_eta_ub + (1 - alpha) * res.eta_ub
-    omikron_lb = alpha * best_omikron_lb + (1 - alpha) * res.omikron_lb
-    omikron_ub = alpha * best_omikron_ub + (1 - alpha) * res.omikron_ub
-
+    stduals = stab.alpha(res)
     omega = 0
     add_col = False
 
@@ -98,13 +95,13 @@ while continue_cond:
             print("%5d  %5d" % (k,m),end=' ',flush=True)
 
         c_start = time()
-        sigma = eta_lb[:,m] + eta_ub[:,inst.iN[m]] + omikron_lb[:,m] + omikron_ub[:,inst.iL[m]]
+        sigma = stduals.eta_lb[:,m] + stduals.eta_ub[:,inst.iN[m]] + stduals.omikron_lb[:,m] + stduals.omikron_ub[:,inst.iL[m]]
 
         cg.column_prepare(machine = m,
-                          pi = pi,
-                          gamma = gamma,
+                          pi = stduals.pi,
+                          gamma = stduals.gamma,
                           sigma = sigma,
-                          mu = mu[m])
+                          mu = stduals.mu[m])
         if args.dump:
             cg.column_write(machine = m, k = k)
         
@@ -121,10 +118,10 @@ while continue_cond:
         if args.validate:
             vres = cg.column_validate(cres,
                                       machine = m,
-                                      pi = pi,
-                                      gamma = gamma,
+                                      pi = stduals.pi,
+                                      gamma = stduals.gamma,
                                       sigma = sigma,
-                                      mu = mu[m])
+                                      mu = stduals.mu[m])
 
             if vres.status != CG.CGValidateStatus.Valid:
                 print(vres)
@@ -144,8 +141,9 @@ while continue_cond:
             print("%20.3f %20.3f %8.3f (%8.3f) %s" %(cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value ) )
         
     if args.verbose>1:
-        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,best_omega, time() - r_start , 0),end=' ')
-        
+        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,stab.best_omega(), time() - r_start , 0),end=' ')
+
+    
     if omega > - args.epslon or not add_col:
         continue_cond = False
 
@@ -154,11 +152,19 @@ while continue_cond:
         continue_cond = False
 
     if continue_cond:
-        print("C")
+        print("C %0.6f %d" %(alpha, stab.improvements()))
     else:
         print("T")
-        
+
+    alpha = stab.compute(omega = omega,stabdual = stduals)
+
+
+if args.verbose>3:
+    print("Converting LP model to MIP model")
 cg.lp2mip()
+
+if args.verbose>3:
+    print("Solve MIP model")
 
 solution = cg.solve()
 
