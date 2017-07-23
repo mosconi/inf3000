@@ -47,18 +47,18 @@ class Stabilization(object):
         
         self._iterations +=1
         new_alpha = max(self._args.alpha_min, self._args.alpha0*(min(1,1 - (self._iterations - self._args.alpha_offset)*(self._args.alpha_scale)/self._instance.nproc)))
+        self._best_pi = stabdual.pi * new_alpha
+        self._best_mu = stabdual.mu * new_alpha
+        self._best_gamma = stabdual.gamma * new_alpha
+        self._best_eta_lb = stabdual.eta_lb * new_alpha
+        self._best_eta_ub = stabdual.eta_ub * new_alpha
+        self._best_omikron_lb = stabdual.omikron_lb * new_alpha
+        self._best_omikron_ub = stabdual.omikron_ub * new_alpha
         
         if omega > self._best_omega:
             self._improvements += 1
             
             old_alpha = self._alpha
-            self._best_pi = stabdual.pi * new_alpha
-            self._best_mu = stabdual.mu * new_alpha
-            self._best_gamma = stabdual.gamma * new_alpha
-            self._best_eta_lb = stabdual.eta_lb * new_alpha
-            self._best_eta_ub = stabdual.eta_ub * new_alpha
-            self._best_omikron_lb = stabdual.omikron_lb * new_alpha
-            self._best_omikron_ub = stabdual.omikron_ub * new_alpha
         
             if self._args.verbose >2:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
@@ -119,18 +119,18 @@ class Stabilization(object):
         
         self._iterations +=1
         new_alpha = max(self._args.alpha_min, self._args.alpha0*(min(1,1 - (self._iterations - self._args.alpha_offset)*(self._args.alpha_scale)/self._args.alpha_steps)))
+        self._best_pi = stabdual.pi * new_alpha
+        self._best_mu = stabdual.mu * new_alpha
+        self._best_gamma = stabdual.gamma * new_alpha
+        self._best_eta_lb = stabdual.eta_lb * new_alpha
+        self._best_eta_ub = stabdual.eta_ub * new_alpha
+        self._best_omikron_lb = stabdual.omikron_lb * new_alpha
+        self._best_omikron_ub = stabdual.omikron_ub * new_alpha
         
         if omega > self._best_omega:
             self._improvements += 1
             
             old_alpha = self._alpha
-            self._best_pi = stabdual.pi * new_alpha
-            self._best_mu = stabdual.mu * new_alpha
-            self._best_gamma = stabdual.gamma * new_alpha
-            self._best_eta_lb = stabdual.eta_lb * new_alpha
-            self._best_eta_ub = stabdual.eta_ub * new_alpha
-            self._best_omikron_lb = stabdual.omikron_lb * new_alpha
-            self._best_omikron_ub = stabdual.omikron_ub * new_alpha
         
             if self._args.verbose >2:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))

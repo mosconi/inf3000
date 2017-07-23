@@ -79,6 +79,7 @@ class CG(object):
             raise Exception("MIP Model not defined")
 
         self._mip.optimize()
+
         _obj = self._mip.ObjVal
 
         nproc = self._instance.nproc

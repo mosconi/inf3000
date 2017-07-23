@@ -10,6 +10,9 @@ solver.add_argument("--tol",type=float,default=1e-6,
                     help="Error tolerance (calculations)")
 solver.add_argument("--validate",dest="validate",action="store_true",default=False,
                     help="Validate solver results.")
+solver.add_argument("--accept",dest="accept",action="store_true",default=False,
+                    help="accept solver results.")
+
 
 log_group = parser.add_argument_group("log","For solver logging")
 log_group.add_argument("--log",dest="log",default=False,action="store_true",
@@ -24,8 +27,10 @@ model.add_argument("--pregenerate",dest="generate",default=False,action="store_t
                        help="Pre-generate some columns")
 model.add_argument("--dump",dest="dump",action="store_true",default=False,
                     help="Dump models.")
-model.add_argument("--run_name",dest="run_name",default="columngeneration",
+model.add_argument("--runname",dest="run_name",default="columngeneration",
                     help="Name for the model")
+model.add_argument("--time",dest="time",default=False,action="store_true",
+                    help="Time the model")
 
 
 stab = parser.add_argument_group("stabilization","Options to change dual stabilization")

@@ -7,7 +7,6 @@ from time import time
 from rmg import roadef,common,instance,Instance,columngeneration
 
 import rmg.columngeneration as CG
-
 from gurobipy import tupledict
 
 parser = argparse.ArgumentParser(description="",
@@ -38,7 +37,7 @@ np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x:
 
 inst = Instance(args)
 
-cg = CG.CG3(instance=inst,args=args)
+cg = CG.CG1(instance=inst,args=args)
 
 if args.verbose >3:
     print("building LP Model")
@@ -50,34 +49,11 @@ for m in range(inst.nmach):
         print(" building machine %5d (of %5d) MIP model" % (m,inst.nmach))
     cg.build_column_model(m)
     if args.generate:
-        if args.verbose >3:
-            print(" Pregenerate columns")
-        
         for p in range(inst.nproc):
             m_assign = inst.mach_map_assign(m).copy()
             m_assign[p] = not m_assign[p]
             if inst.mach_validate(machine=m,map_assign=m_assign):
-                cres = CG.CGColumn(obj=inst.mach_objective(machine=m,map_assign =m_assign),
-                                   procs = m_assign,
-                                   rc = 0,
-                                   g = None,
-                                   servs = None,
-                                   z = None,
-                                   hsigma = None,
-                                   ggamma = None,
-                                   pixp = None,
-                                   u = None,
-                                   ut = None,
-                                   a = None,
-                                   d = None,
-                                   b = None,
-                                   pmc = None,
-                                   mmc = None,
-                                   rtime = None
-                )
-                
-                cg.lp_add_col(m,cres)
-            
+                pass
 
 
             
@@ -102,7 +78,7 @@ while continue_cond:
 
     res = cg.solve_relax()
     if args.dump:
-        cg.lpwritesol(k = k)
+        cg.lpwritesol(k)
     r_stop = time()
 
     if args.verbose >1:
@@ -164,14 +140,10 @@ while continue_cond:
             raise Exception("problema ao adicionar coluna")
         
         if args.verbose>1:
-            print("%20.3f %20.3f %8.3f (%8.3f) %s" %(cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value),end=' ' )
-            if ares.status == CG.CGAddStatus.Exist:
-                print(ares.var.VarName)
-            else:
-                print()
-                
+            print("%20.3f %20.3f %8.3f (%8.3f) %s" %(cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value ) )
+        
     if args.verbose>1:
-        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,stab.best_omega(), time() - r_start , r_stop - r_start),end=' ')
+        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,stab.best_omega(), time() - r_start , 0),end=' ')
 
     
     if omega > - args.epslon or not add_col:
@@ -188,17 +160,11 @@ while continue_cond:
 
     alpha = stab.compute(omega = omega,stabdual = stduals)
 
-if args.dump:
-    cg.lpwrite(k=-1)
 
-    
 if args.verbose>3:
     print("Converting LP model to MIP model")
 cg.lp2mip()
 
-if args.dump:
-    cg.write()
-    
 if args.verbose>3:
     print("Solve MIP model")
 

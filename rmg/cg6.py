@@ -77,6 +77,9 @@ while continue_cond:
         cg.lpwrite(k)
 
     res = cg.solve_relax()
+    if args.dump:
+        cg.lpwritesol(k)
+
     r_stop = time()
 
     if args.verbose >1:

@@ -91,6 +91,7 @@ class CG2(CG):
         self._lp.ModelSense = GRB.MINIMIZE
 
         self._lp.Params.ScaleFlag = 0
+        self._lp.Params.Method = 1
         self._lp.Params.Quad = 1
         self._lp.Params.NumericFocus = 3
 
@@ -748,7 +749,8 @@ class CG2(CG):
             print(colres.u)
             print(" u (delta):")
             print(_u - colres.u)
-            if np.any(abs((_u - colres.u)*1.0/_u) > self._args.tol):
+            if np.any(abs((_u - colres.u)*1.0/_u) > self._args.tol) and \
+               not self._args.accept:
                 return CGValidate(status=CGValidateStatus.CalcMismatch)
             else:
                 print("Error too low, ignoring")
@@ -775,7 +777,8 @@ class CG2(CG):
             print(_a - colres.a)
             if np.any(abs((_u - colres.u)*1.0/_u) > self._args.tol):
                 print("Error big ( err > tol)")
-                return CGValidate(status=CGValidateStatus.CalcMismatch)
+                if not self._args.accept:
+                    return CGValidate(status=CGValidateStatus.CalcMismatch)
             else:
                 print("Error too low, ignoring")
         
@@ -800,7 +803,8 @@ class CG2(CG):
             print(Wlc)
             if np.any(abs((_u - colres.u)*1.0/_u) > self._args.tol):
                 print("Error big ( err > tol)")
-                return CGValidate(status=CGValidateStatus.CalcMismatch)
+                if not self._args.accept:
+                    return CGValidate(status=CGValidateStatus.CalcMismatch)
             else:
                 print("Error too low, ignoring")
         
@@ -837,7 +841,8 @@ class CG2(CG):
                    np.amax(WPMC),
                    np.amax(WMMC)]) * self._args.tol:
                 print("Error big ( err > tol)")
-                return CGValidate(status=CGValidateStatus.CalcMismatch)
+                if not self._args.accept:
+                    return CGValidate(status=CGValidateStatus.CalcMismatch)
             else:
                 print("Error too low, ignoring")
 
@@ -851,7 +856,8 @@ class CG2(CG):
             print(colres.pixp)
             print("  pi*x (delta):")            
             print(_pixp - colres.pixp)
-            return CGValidate(status=CGValidateStatus.CalcMismatch)
+            if not self._args.accept:
+                return CGValidate(status=CGValidateStatus.CalcMismatch)
         
         _hsigma = _h.dot(sigma).sum()
         if abs( _hsigma - colres.hsigma) > self._args.epslon and False:
@@ -862,7 +868,8 @@ class CG2(CG):
             print(colres.hsigma)
             print("  h*sigma (delta):")
             print(_hsigma - colres.hsigma)
-            return CGValidate(status=CGValidateStatus.CalcMismatch)
+            if not self._args.accept:
+                return CGValidate(status=CGValidateStatus.CalcMismatch)
 
         _ggamma = _g.dot(gamma).sum()
         if abs( _ggamma - colres.ggamma) > self._args.epslon and False:
@@ -873,7 +880,8 @@ class CG2(CG):
             print(colres.ggamma)
             print("  g*gamma (delta):")
             print(_ggamma - colres.ggamma)            
-            return CGValidate(status=CGValidateStatus.CalcMismatch)
+            if not self._args.accept:
+                return CGValidate(status=CGValidateStatus.CalcMismatch)
 
         _rc = _obj - _pixp  - _hsigma  - _ggamma - mu
         if abs(_rc - colres.rc) > self._args.epslon:
@@ -896,7 +904,8 @@ class CG2(CG):
                    np.amax(WPMC),
                    np.amax(WMMC)]) * self._args.tol:
                 print("Error big ( err > tol)")
-                return CGValidate(status=CGValidateStatus.CalcMismatch)
+                if not self._args.accept:
+                    return CGValidate(status=CGValidateStatus.CalcMismatch)
             else:
                 print("Error too low, ignoring")
 
