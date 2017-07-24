@@ -577,9 +577,12 @@ class CG1(CG):
             print(C)
             print(" delta:")
             print(_u + _ut - C)
-            
             print("Over capacity!")
-            return CGValidate(status=CGValidateStatus.Invalid)
+            if np.any(abs(_u + _ut -C)*1.0/C > self._args.tol):
+                if not self._args.accept:
+                    return CGValidate(status=CGValidateStatus.Invalid)
+            else:
+                print("Error too low, ignoring")
 
         _a = C - _u
         if np.any(abs(_a - colres.a) > self._args.epslon):
