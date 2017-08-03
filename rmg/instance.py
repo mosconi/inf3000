@@ -81,11 +81,13 @@ class Instance:
         self.nserv=nserv
         delta=[0 for s in range(nserv)]
         sdep=defaultdict(list)
+        sS=defaultdict(list)
 
         self.gamma = np.zeros((nserv,nserv), dtype=np.bool)
         for s in range(self.nserv):
             l = lines.pop(0)
             delta[s]=l[0]
+            sS[l[1]].append(s)
             if l[1]>0:
                 sdep[s]=l[2:]
                 for _s in sdep[s]:
@@ -95,6 +97,7 @@ class Instance:
 
         self.delta = delta
         self.sdep = sdep
+        self.sS = sS
         self.nproc = nproc
 
         self.S=defaultdict(list)
