@@ -68,7 +68,7 @@ class CG1(CG):
         self._lp.ModelSense = GRB.MINIMIZE
 
         self._lp.Params.ScaleFlag = 0
-        self._lp.Params.Method = 1
+        #self._lp.Params.Method = 1
         self._lp.Params.Quad = 1
         self._lp.Params.NumericFocus = 3
 
