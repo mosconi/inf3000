@@ -97,3 +97,8 @@ class CG(object):
         
     def solve_lp(self):
         pass
+    
+    def mip_stats(self):
+        if self._mip is None:
+            return
+        self._mip.printStats()

@@ -163,7 +163,9 @@ class CG1(CG):
         self._mach[machine].model.Params.MIPGap = 0.01
 
         self._mach[machine]._obj = self._mach[machine].model.addVar(vtype=GRB.INTEGER,name="obj",obj=0)
-        self._mach[machine]._pixp = self._mach[machine].model.addVar(vtype=GRB.CONTINUOUS,name="pixp",obj=0)
+
+        if self._args.validate:
+            self._mach[machine]._pixp = self._mach[machine].model.addVar(vtype=GRB.CONTINUOUS,name="pixp",obj=0)
 
         self._mach[machine]._x = self._mach[machine].model.addVars(nproc,
                                                                    obj=pi,
@@ -286,11 +288,12 @@ class CG1(CG):
                      )==0
             ,name="cost")
 
-        self._mach[machine]._pixp_constr = self._mach[machine].model.addConstr(
-            self._mach[machine]._pixp == 
-            quicksum(pi[p]*self._mach[machine]._x[p] for p in range(nproc)) 
-            ,name="pixp"
-        )        
+        if self._args.validate:
+            self._mach[machine]._pixp_constr = self._mach[machine].model.addConstr(
+                self._mach[machine]._pixp == 
+                quicksum(pi[p]*self._mach[machine]._x[p] for p in range(nproc)) 
+                ,name="pixp"
+            )        
 
         self._mach[machine].model.update()
 
@@ -315,12 +318,11 @@ class CG1(CG):
         for p in range(nproc):
             self._mach[machine]._x[p].Obj = - pi[p]
             if self._args.validate:
-                pass
-                # self._mach[machine].model.chgCoeff(
-                #      self._mach[machine]._pixp_constr,
-                #      self._mach[machine]._x[p],
-                #      -pi[p]
-                #      )
+                self._mach[machine].model.chgCoeff(
+                    self._mach[machine]._pixp_constr,
+                      self._mach[machine]._x[p],
+                      -pi[p]
+                      )
 
 
         self._mach[machine].model.update()

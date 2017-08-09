@@ -38,164 +38,27 @@ np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x:
 
 inst = Instance(args)
 
-for c in sorted(inst.sS):
-    print(c, inst.sS[c])
+cg = CG.CG4(instance=inst,args=args)
 
+for ndeps in sorted(inst.sS):
+    if args.verbose >3:
+        print("building LP Model for services with %d deps" % ndeps)
 
-
-cg = CG.CG(instance=inst,args=args)
+    cg.build_lpmodel(ndeps)
+    """
+    for m in range(inst.nmach):
+        if args.verbose >3:
+            print(" building machine %5d (of %5d) MIP model " % (m,inst.nmach))
+            cg.build_column_model(m,ndeps)
+            if args.generate:
+                if args.verbose >3:
+                    print(" Pregenerate columns")
+                pass
+    """                
+        
+            
 
 sys.exit(0)
-
-
-if args.verbose >3:
-    print("building LP Model")
-
-cg.build_lpmodel()
-
-for m in range(inst.nmach):
-    if args.verbose >3:
-        print(" building machine %5d (of %5d) MIP model" % (m,inst.nmach))
-    cg.build_column_model(m)
-    if args.generate:
-        if args.verbose >3:
-            print(" Pregenerate columns")
-        
-        for p in range(inst.nproc):
-            m_assign = inst.mach_map_assign(m).copy()
-            m_assign[p] = not m_assign[p]
-            if inst.mach_validate(machine=m,map_assign=m_assign):
-                cres = CG.CGColumn(obj=inst.mach_objective(machine=m,map_assign =m_assign),
-                                   procs = m_assign,
-                                   rc = 0,
-                                   g = None,
-                                   servs = None,
-                                   z = None,
-                                   hsigma = None,
-                                   ggamma = None,
-                                   pixp = None,
-                                   u = None,
-                                   ut = None,
-                                   a = None,
-                                   d = None,
-                                   b = None,
-                                   pmc = None,
-                                   mmc = None,
-                                   rtime = None
-                )
-                
-                cg.lp_add_col(m,cres)
-            
-
-
-            
-continue_cond = True
-
-res = cg.solve_relax()
-first_obj = res.obj
-
-stab = CG.Stabilization(inst, args)
-
-alpha = stab.alpha0()
-
-k = 0
-while continue_cond:
-    if args.verbose >1:
-        print("-"*(int(columns)-2))
-        print("%5d master" % (k),end=' ',flush=True)
-
-    r_start = time()
-    if args.dump:
-        cg.lpwrite(k)
-
-    res = cg.solve_relax()
-    if args.dump:
-        cg.lpwritesol(k = k)
-    r_stop = time()
-
-    if args.verbose >1:
-        print("%20.3f %20.3f %8.3f (%8.3f) %20.3f" % (res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
-    
-    if res is None:
-        raise Exception("LP não ótimo")
-    
-
-    stduals = stab.alpha(res)
-    omega = 0
-    add_col = False
-
-    for m in range(inst.nmach):
-        if args.verbose>1:
-            print("%5d  %5d" % (k,m),end=' ',flush=True)
-
-        c_start = time()
-        sigma = stduals.eta_lb[:,m] + stduals.eta_ub[:,inst.iN[m]] + stduals.omikron_lb[:,m] + stduals.omikron_ub[:,inst.iL[m]]
-
-        cg.column_prepare(machine = m,
-                          pi = stduals.pi,
-                          gamma = stduals.gamma,
-                          sigma = sigma,
-                          mu = stduals.mu[m])
-        if args.dump:
-            cg.column_write(machine = m, k = k)
-        
-        cres = cg.column_compute(machine = m)
-
-        c_stop = time()
-        if cres is None:
-            raise Exception("problema ao calcular coluna")
-
-
-        if args.dump:
-            cg.column_writesol(machine = m, k = k)
-
-        if args.validate:
-            vres = cg.column_validate(cres,
-                                      machine = m,
-                                      pi = stduals.pi,
-                                      gamma = stduals.gamma,
-                                      sigma = sigma,
-                                      mu = stduals.mu[m])
-
-            if vres.status != CG.CGValidateStatus.Valid:
-                print(vres)
-                raise Exception("problema ao validar coluna")
-        
-        omega += cres.rc
-        ares = cg.lp_add_col(m,cres)
-
-        if ares.status == CG.CGAddStatus.Added:
-            add_col = True
-            
-        elif ares.status == CG.CGAddStatus.NotAdded:
-            print(ares)
-            raise Exception("problema ao adicionar coluna")
-        
-        if args.verbose>1:
-            print("%20.3f %20.3f %8.3f (%8.3f) %s" %(cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value),end=' ' )
-            if ares.status == CG.CGAddStatus.Exist:
-                print(ares.var.VarName)
-            else:
-                print()
-                
-    if args.verbose>1:
-        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,stab.best_omega(), time() - r_start , r_stop - r_start),end=' ')
-
-    
-    if omega > - args.epslon or not add_col:
-        continue_cond = False
-
-    k+=1
-    if k >= 4 and False:
-        continue_cond = False
-
-    if continue_cond:
-        print("C %0.6f %d" %(alpha, stab.improvements()))
-    else:
-        print("T")
-
-    alpha = stab.compute(omega = omega,stabdual = stduals)
-
 if args.dump:
     cg.lpwrite(k=-1)
 

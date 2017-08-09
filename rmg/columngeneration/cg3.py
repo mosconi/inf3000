@@ -13,6 +13,15 @@ class CG3(CG1):
     def lp2mip(self):
         self.__lp2mip()
 
+    def build_lpmodel(self):
+        super().build_lpmodel()
+        self._lp.Params.Method = 2
+
+    def build_column_model(self,machine):
+        super().build_column_model(machine)
+        #self._mach[machine].model.Params.Method = 2
+
+
     def __lp2mip(self):
         self._mip = self._lp
 

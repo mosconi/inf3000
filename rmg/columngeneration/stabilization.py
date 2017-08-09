@@ -19,7 +19,8 @@ class Stabilization(object):
         self._args = args
         self._iterations = 0
         self._improvements  = 0
-        self._alpha = args.alpha0
+        self._last_improvement = 0
+        self._alpha = 0
         self._best_omega = - np.inf
         self._best_pi = np.zeros(instance.nproc,dtype=np.float64)                        # Duais de processos
         self._best_mu = np.zeros(instance.nmach,dtype=np.float64)                        # Duais de máquina
@@ -28,9 +29,11 @@ class Stabilization(object):
         self._best_eta_ub = np.zeros((instance.nserv,len(instance.N)),dtype=np.float64)      # Dual de h[s,n]
         self._best_omikron_lb = np.zeros((instance.nserv,instance.nmach),dtype=np.float64)   # Dual de o[s,l,m]
         self._best_omikron_ub = np.zeros((instance.nserv,len(instance.L)),dtype=np.float64)  # Dual de o[s,l]
+        if args.method == 'free':
+            self._args.alpha0 = 0.0
 
     def alpha0(self):
-        return self._alpha
+        return self._args.alpha0
     
     def alpha(self,lpres):
         pi =         self._best_pi         + (1 - self._alpha) * lpres.pi
@@ -57,6 +60,7 @@ class Stabilization(object):
         
         if omega > self._best_omega:
             self._improvements += 1
+            self._last_improvement = self._iterations
             
             old_alpha = self._alpha
         
@@ -66,6 +70,54 @@ class Stabilization(object):
         self._alpha = new_alpha
             
         return self._alpha
+    
+    def free(self,omega,stabdual):
+        self._iterations +=1
+        new_alpha = 0.0
+        self._best_pi = stabdual.pi * new_alpha
+        self._best_mu = stabdual.mu * new_alpha
+        self._best_gamma = stabdual.gamma * new_alpha
+        self._best_eta_lb = stabdual.eta_lb * new_alpha
+        self._best_eta_ub = stabdual.eta_ub * new_alpha
+        self._best_omikron_lb = stabdual.omikron_lb * new_alpha
+        self._best_omikron_ub = stabdual.omikron_ub * new_alpha
+        
+        if omega > self._best_omega:
+            self._improvements += 1
+            self._last_improvement = self._iterations
+            
+            old_alpha = self._alpha
+        
+            if self._args.verbose >2:
+                print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
+            self._best_omega = omega
+        self._alpha = new_alpha
+
+        return 0.0
+    
+    def constant(self,omega,stabdual):
+        self._iterations +=1
+        new_alpha = self._args.alpha0
+        self._best_pi = stabdual.pi * new_alpha
+        self._best_mu = stabdual.mu * new_alpha
+        self._best_gamma = stabdual.gamma * new_alpha
+        self._best_eta_lb = stabdual.eta_lb * new_alpha
+        self._best_eta_ub = stabdual.eta_ub * new_alpha
+        self._best_omikron_lb = stabdual.omikron_lb * new_alpha
+        self._best_omikron_ub = stabdual.omikron_ub * new_alpha
+        
+        if omega > self._best_omega:
+            self._improvements += 1
+            self._last_improvement = self._iterations
+            
+            old_alpha = self._alpha
+        
+            if self._args.verbose >2:
+                print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
+            self._best_omega = omega
+        self._alpha = new_alpha
+
+        return self._args.alpha0
 
     def linearip1(self,omega,stabdual):
         
@@ -88,6 +140,7 @@ class Stabilization(object):
                 print("   alpha improment %.6f -> %.6f "%( old_alpha, new_alpha))
             self._best_omega = omega
             self._alpha = new_alpha
+            self._last_improvement = self._iterations
             
         return self._alpha
 
@@ -112,6 +165,7 @@ class Stabilization(object):
                 print("   alpha improment %.6f -> %.6f "%( old_alpha, new_alpha))
             self._best_omega = omega
             self._alpha = new_alpha
+            self._last_improvement = self._iterations
             
         return self._alpha
 
@@ -129,6 +183,7 @@ class Stabilization(object):
         
         if omega > self._best_omega:
             self._improvements += 1
+            self._last_improvement = self._iterations
             
             old_alpha = self._alpha
         
@@ -146,3 +201,5 @@ class Stabilization(object):
         return self._best_omega
     def improvements(self):
         return self._improvements
+    def nonimprovements(self):
+        return self._iterations - self._last_improvement

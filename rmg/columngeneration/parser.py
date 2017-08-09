@@ -27,10 +27,14 @@ model.add_argument("--pregenerate",dest="generate",default=False,action="store_t
                        help="Pre-generate some columns")
 model.add_argument("--dump",dest="dump",action="store_true",default=False,
                     help="Dump models.")
+model.add_argument("--mipdump",dest="mipdump",action="store_true",default=False,
+                    help="Dump MIP model.")
 model.add_argument("--runname",dest="run_name",default="columngeneration",
                     help="Name for the model")
 model.add_argument("--time",dest="time",default=False,action="store_true",
                     help="Time the model")
+model.add_argument("--mipstats",dest="mipstats",default=False,action="store_true",
+                    help="Print the MIP model stats")
 
 
 stab = parser.add_argument_group("stabilization","Options to change dual stabilization")
@@ -38,7 +42,7 @@ stab.add_argument("--start",dest="alpha0",default=0.9,type=float,
                   help="Starting alpha")
 stab.add_argument("--min",dest="alpha_min",default=0.0,type=float,
                   help="Ending alpha")
-stab.add_argument("--method",dest="method",choices=["linearkp1","linearip1","exp","omegaratio","lineark","lineari"],default="linearkp1",
+stab.add_argument("--method",dest="method",choices=["linearkp1","linearip1","exp","omegaratio","lineark","lineari","free","constant"],default="free",
                   help="Computation method")
 stab.add_argument("--offset",dest="alpha_offset",default=0,type=int,
                   help="Offset to compute")
