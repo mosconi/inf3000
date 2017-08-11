@@ -114,7 +114,16 @@ class CG3(CG1):
                 for s in sorted(S):
                      # é binário, por causa da restrição de conflito
                     serv = procs[S[s]].sum()
+                    if serv >1:
+                        print("s: %d, m: %d, sum: %d" % (s,m,serv))
+                        print(v.VarName)
+                        print(S[s])
+                        for p in S[s]:
+                            print(procs[p])
                     gserv = z[S[s]].sum()
+                    if gserv >1:
+                        print("s: %d, m: %d, gsum: %d" % (s,m,gserv))
+                        print(S[s])
                     self._mip.chgCoeff( self._h_lb_constr[s,iN[m],m], v, serv)
                     self._mip.chgCoeff( self._h_ub_constr[s,iN[m]], v, serv)
                     self._mip.chgCoeff( self._o_lb_constr[s,iL[m],m], v, serv)

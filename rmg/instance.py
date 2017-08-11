@@ -168,7 +168,7 @@ class Instance:
             return True
         
         for s in self.S:
-            if map_assign[s].sum()> 1:
+            if map_assign[self.S[s]].sum()> 1:
                 return False
 
         _util = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
