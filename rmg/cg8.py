@@ -8,8 +8,6 @@ from rmg import roadef,common,instance,Instance,columngeneration
 
 import rmg.columngeneration as CG
 
-from gurobipy import tupledict
-
 parser = argparse.ArgumentParser(description="",
                                  parents=[roadef.parser,
                                           common.parser,
@@ -21,7 +19,6 @@ parser = argparse.ArgumentParser(description="",
 
 
 # Other parameters:
-
 args = parser.parse_args()
 
 if args.verbose is None:
@@ -35,37 +32,55 @@ if args.name:
 rows, columns = os.popen('stty size', 'r').read().split()
 np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+17.3f" % x,'int': lambda x: "%+17d" % x, })
 
-
+all_start = time()
+if args.verbose >2:
+    if args.time:
+        print("%12.3f " % (time() - all_start),end='')
+    print("Load Instance data")
 inst = Instance(args)
 
-for c in sorted(inst.sS):
-    print(c, inst.sS[c])
 
+cg = CG.CG4(instance=inst,args=args)
 
-
-cg = CG.CG(instance=inst,args=args)
-
-sys.exit(0)
-
-
-if args.verbose >3:
+if args.verbose >0:
+    _time = time() - all_start
+    if args.time:
+        print("%12.3f " % (_time),end='')
     print("building LP Model")
+    if args.log:
+        cg.lplog("\n/*"+"*"*70)
+        cg.lplog(" *")
+        cg.lplog(" * %12.3f build LP Model" % _time)
+        cg.lplog(" *")
+        
 
 cg.build_lpmodel()
 
 for m in range(inst.nmach):
-    if args.verbose >3:
-        print(" building machine %5d (of %5d) MIP model" % (m,inst.nmach))
+    if args.verbose >1:
+        if args.time:
+            _time = time() - all_start
+            print("%12.3f " % (_time),end='')
+        print("building machine %5d (of %5d) MIP model" % (m,inst.nmach))
+    if args.log:
+        cg.lplog("\n/*"+"*"*70)
+        cg.lplog(" *")
+        cg.lplog(" * %12.3f building machine %5d (of %5d) MIP model" % (_time,m,inst.nmach))
+        cg.lplog(" *")
+        
     cg.build_column_model(m)
     if args.generate:
-        if args.verbose >3:
+        if args.verbose >2:
+            if args.time:
+                print("%12.3f " %( time() - all_start),end='')
             print(" Pregenerate columns")
-        
+            
+        m_assign = inst.mach_map_assign(m)
         for p in range(inst.nproc):
-            m_assign = inst.mach_map_assign(m).copy()
             m_assign[p] = not m_assign[p]
-            if inst.mach_validate(machine=m,map_assign=m_assign):
-                cres = CG.CGColumn(obj=inst.mach_objective(machine=m,map_assign =m_assign),
+            mval = inst.mach_validate(machine=m,map_assign=m_assign)
+            if mval.status:
+                cres = CG.CGColumn(obj=mval.obj,
                                    procs = m_assign,
                                    rc = 0,
                                    g = None,
@@ -85,6 +100,7 @@ for m in range(inst.nmach):
                 )
                 
                 cg.lp_add_col(m,cres)
+            m_assign[p] = not m_assign[p]
             
 
 
@@ -99,10 +115,21 @@ stab = CG.Stabilization(inst, args)
 alpha = stab.alpha0()
 
 k = 0
+loop_start = time()
 while continue_cond:
+    rtime = 0
+    _time = time()
     if args.verbose >1:
         print("-"*(int(columns)-2))
-        print("%5d master" % (k),end=' ',flush=True)
+        if args.time:
+            print("%12.3f %12.3f " % (_time - all_start, _time - loop_start),end='')
+        print("%5d master" % (k),end=' ')
+    if args.log:
+        cg.lplog("\n/*"+"*"*70)
+        cg.lplog(" *")
+        cg.lplog(" * %12.3f %12.3f MASTER iteration %d" % (_time-all_start,_time-all_start,k))
+        cg.lplog(" *")
+        
 
     r_start = time()
     if args.dump:
@@ -114,8 +141,15 @@ while continue_cond:
     r_stop = time()
 
     if args.verbose >1:
-        print("%20.3f %20.3f %8.3f (%8.3f) %20.3f" % (res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
-    
+        print("%20.3f %20.3f %8.3f (%8.3f)   %.6f %17.3f" % (res.obj,first_obj, r_stop - r_start, res.rtime, alpha, res.obj - first_obj))
+    if args.log:
+        cg.lplog("\n/*"+"*"*70)
+        cg.lplog(" *")
+        cg.lplog(" *T:[MASTER:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %20.3f" % (k,_time - all_start, _time - loop_start ,res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
+        cg.lplog(" *")
+
+
+    rtime += res.rtime
     if res is None:
         raise Exception("LP não ótimo")
     
@@ -125,8 +159,16 @@ while continue_cond:
     add_col = False
 
     for m in range(inst.nmach):
-        if args.verbose>1:
-            print("%5d  %5d" % (k,m),end=' ',flush=True)
+        _time = time()
+        if args.verbose>3:
+            if args.time:
+                print("%12.3f %12.3f " % (_time - all_start, _time - loop_start),end='')
+            print("%5d  %5d" % (k,m),end=' ')
+        if args.log:
+            cg.machlog(m,"\n/*"+"*"*70)
+            cg.machlog(m," *")
+            cg.machlog(m," * %12.3f %12.3f machine[%d] iteration %d" % (_time-all_start,_time-all_start,m,k))
+            cg.machlog(m," *")
 
         c_start = time()
         sigma = stduals.eta_lb[:,m] + stduals.eta_ub[:,inst.iN[m]] + stduals.omikron_lb[:,m] + stduals.omikron_ub[:,inst.iL[m]]
@@ -171,53 +213,127 @@ while continue_cond:
             print(ares)
             raise Exception("problema ao adicionar coluna")
         
-        if args.verbose>1:
+        if args.verbose>3:
             print("%20.3f %20.3f %8.3f (%8.3f) %s" %(cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value),end=' ' )
             if ares.status == CG.CGAddStatus.Exist:
                 print(ares.var.VarName)
             else:
                 print()
+        rtime += cres.rtime
+        if args.log:
+            cg.machlog(m,"\n/*"+"*"*70)
+            cg.machlog(m," *")
+            cg.machlog(m," *T:[%06d:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %s" % (m,k,_time - all_start, _time - loop_start, cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value))
+            cg.machlog(m," *")
+
+    _time= time()
                 
     if args.verbose>1:
-        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,stab.best_omega(), time() - r_start , r_stop - r_start),end=' ')
+        if args.time:
+            print("%12.3f %12.3f " % (_time - all_start, _time - loop_start),end='')
+        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,stab.best_omega(), _time - r_start , rtime),end=' ')
 
     
     if omega > - args.epslon or not add_col:
         continue_cond = False
-
-    k+=1
     if k >= 4 and False:
         continue_cond = False
 
     if continue_cond:
-        print("C %0.6f %d" %(alpha, stab.improvements()))
+        print("C %0.6f %5d %5d %0.3f" %(alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega()))
+        _c = "C"
     else:
-        print("T")
+        print("T %0.6f %5d %5d %0.3f" %(alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega()))
+        _c = "T"
+    if args.log:
+        cg.lplog("\n/*"+"*"*70)
+        cg.lplog(" *")
+        cg.lplog(" *T:[ OMEGA:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %s %.6f %d %d" % (k,_time - all_start, _time - loop_start, omega,stab.best_omega(), _time - r_start , rtime, _c,alpha, stab.improvements(), stab.nonimprovements()))
+        cg.lplog(" *")
+
 
     alpha = stab.compute(omega = omega,stabdual = stduals)
+    
+    k+=1
+
+    if (args.maxsteps > 0) and \
+       (k > args.maxsteps):
+        break
+    if time() - loop_start > args.timelimit:
+        break
 
 if args.dump:
     cg.lpwrite(k=-1)
 
     
-if args.verbose>3:
+if args.verbose>2:
+    print("-"*(int(columns)-2))
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
     print("Converting LP model to MIP model")
 cg.lp2mip()
+if args.verbose>2:
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Done")
 
-if args.dump:
-    cg.write()
+if args.mipstats:
+    if args.verbose>1:
+        print("-"*(int(columns)-2))
+    if args.verbose>2:
+        if args.time:
+            print("%12.3f " % (time() - all_start), end='')
+        print("MIP STATS")
+    cg.mip_stats()
+
+#if args.dump or args.mipdump:
+#    cg.write()
     
-if args.verbose>3:
-    print("Solve MIP model")
+if args.verbose>2:
+    print("-"*(int(columns)-2))
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Pre-solve MIP model")
+
+mip_start=time()
+#solution = cg.solve()
+
+cg.presolve()
+if args.verbose>2:
+    print("-"*(int(columns)-2))
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Pre-solve done")
+
+
+if args.dump or args.mipdump:
+    cg.write()
+if args.mipstats:
+    if args.verbose>1:
+        print("-"*(int(columns)-2))
+    if args.verbose>2:
+        if args.time:
+            print("%12.3f " % (time() - all_start), end='')
+        print("MIP STATS")
+    cg.mip_stats()
 
 solution = cg.solve()
 
-#print(solution)
-
 if args.verbose>0:
+    if args.verbose>1:
+        print("-"*(int(columns)-2))
+    if args.time:
+        print("%12.3f %12.3f Solution: %20.3f" % (time() - all_start,time() - mip_start,solution.obj))
     print(' '.join(str(i) for i in inst.assign()))
     print(' '.join(str(i) for i in solution.assign))
+    if args.verbose>1:
+        print("-"*(int(columns)-2))
 
 if args.new_solution_filename:
     args.new_solution_filename.write(' '.join(str(i) for i in solution.assign))
     
+    if args.verbose>1:
+        print("-"*(int(columns)-2))
+    if args.time:
+        _time = time()
+        print("%12.3f Done in %12.3f/%12.3f s" % (_time - all_start,_time - loop_start,_time - mip_start))

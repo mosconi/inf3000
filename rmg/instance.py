@@ -2,12 +2,13 @@ import argparse
 
 from collections import namedtuple,defaultdict
 
-from gurobipy import tupledict
-
 import numpy as np
 
 parser = argparse.ArgumentParser(add_help=False,
                                  description="Arguments for instance data")
+
+Validate = namedtuple('Validate',['status','obj'])
+
 
 class Instance:
     def __new__  (self, args):
@@ -22,7 +23,6 @@ class Instance:
         
         self.__args=args
         self.__memo=dict()
-        self.__mach_memo = dict()
         self.nproc = 0
         self.nserv = 0
         self.nres = 0
@@ -129,8 +129,6 @@ class Instance:
         self.WPMC=lines[0][0]
         self.WSMC=lines[0][1]
         self.WMMC=lines[0][2]
-        for m in range(self.nmach):
-            self.__mach_memo[m]=dict()
     
 
     def __loadassign(self):
@@ -164,17 +162,14 @@ class Instance:
         if map_assign is None:
             raise Exception("Map_assign is empty")
 
-        if tuple(map_assign) in self.__mach_memo[machine]:
-            return True
-        
         for s in self.S:
             if map_assign[self.S[s]].sum()> 1:
-                return False
+                return Validate(False,0)
 
         _util = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
 
         if any(_util > self.C[machine]):
-            return False
+            return Validate(False,0)
 
         _obj1 = _util - self.SC[machine]
         _obj1[_obj1<0]=0
@@ -196,33 +191,11 @@ class Instance:
         _obj3=self.PMC*moved_procs
         _obj5=np.array([0],dtype=np.int32)
 
-        
-        self.__mach_memo[machine][tuple(map_assign)]={
-            'obj': (self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum(),
-            'util': _util,
-            'moved_proc': moved_procs
-        }
 
-        return (True, (self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum() )
+        _obj=(self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum()
 
-    def mach_objective(self, machine = None, map_assign = None):
-        if machine is None:
-            raise Exception("")
+        return Validate(True,_obj)
 
-        if map_assign is None:
-            raise Exception("")
-
-        if not self.mach_validate(machine, map_assign):
-            raise Exception("Assign not valid for machine %d" % machine)
-
-        _obj = self.__mach_memo[machine][tuple(map_assign)]['obj']
-
-        return _obj
-
-
-
-
-        
     def validate(self,solution=None):
 
         if not solution:

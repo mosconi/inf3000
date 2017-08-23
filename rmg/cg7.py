@@ -56,12 +56,13 @@ for m in range(inst.nmach):
             if args.time:
                 print("%12.3f " %( time() - all_start),end='')
             print(" Pregenerate columns")
-        
+            
+        m_assign = inst.mach_map_assign(m)
         for p in range(inst.nproc):
-            m_assign = inst.mach_map_assign(m).copy()
             m_assign[p] = not m_assign[p]
-            if inst.mach_validate(machine=m,map_assign=m_assign):
-                cres = CG.CGColumn(obj=inst.mach_objective(machine=m,map_assign =m_assign),
+            mres = inst.mach_validate(machine=m,map_assign=m_assign)
+            if mres.status:
+                cres = CG.CGColumn(obj=mres.obj,
                                    procs = m_assign,
                                    rc = 0,
                                    g = None,
@@ -81,7 +82,7 @@ for m in range(inst.nmach):
                 )
                 
                 cg.lp_add_col(m,cres)
-            
+            m_assign[p] = not m_assign[p]            
 
 
             
@@ -198,7 +199,7 @@ while continue_cond:
     if continue_cond:
         print("C %0.6f %d %d" %(alpha, stab.improvements(), stab.nonimprovements()))
     else:
-        print("T")
+        print("T %0.6f %d %d" %(alpha, stab.improvements(), stab.nonimprovements()))
 
     alpha = stab.compute(omega = omega,stabdual = stduals)
 
@@ -236,7 +237,7 @@ if args.verbose>0:
     if args.verbose>1:
         print("-"*(int(columns)-2))
     if args.time:
-        print("%12.3f %12.3f Solution:" % (time() - all_start,time() - mip_start))
+        print("%12.3f %12.3f Solution: %20.3f" % (time() - all_start,time() - mip_start,solution.obj))
     print(' '.join(str(i) for i in inst.assign()))
     print(' '.join(str(i) for i in solution.assign))
     if args.verbose>1:

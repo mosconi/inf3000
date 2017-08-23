@@ -100,8 +100,8 @@ class CG1(CG):
 
         for m in range(nmach):
             c = x0[:,m]
-            obj= self._instance.mach_objective(m,c)
-            self._lbd[m,0].obj=obj
+            mval = self._instance.mach_validate(m,c)
+            self._lbd[m,0].obj=mval.obj
             self._lbd[m,0]._procs = tuple(c)
             
 
@@ -311,7 +311,7 @@ class CG1(CG):
 
         x0 = self._instance.mach_map_assign(machine)
 
-        self._mach[machine].model.reset()
+        #self._mach[machine].model.reset()
 
         self._mach[machine]._cte.Obj = - mu
         
@@ -357,7 +357,7 @@ class CG1(CG):
 
         x0 = self._instance.mach_map_assign(machine)
 
-        self._mach[machine].model.optimize()
+        self._mach[machine].model.optimize(self._cb)
         status = self._mach[machine].model.Status
         if status == GRB.UNBOUNDED:
             raise Exception("UNBOUNDED")

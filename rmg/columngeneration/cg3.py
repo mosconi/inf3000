@@ -19,14 +19,14 @@ class CG3(CG1):
 
     def build_column_model(self,machine):
         super().build_column_model(machine)
-        #self._mach[machine].model.Params.Method = 2
+        self._mach[machine].model.Params.Method = 2
 
 
     def __lp2mip(self):
         self._mip = self._lp
 
         for v in self._mip.getVars():
-            v.vtype = GRB.INTEGER
+            v.vtype = GRB.BINARY
 
         for m in range(self._instance.nmach):
             self._lbd[m,0].Start=1
@@ -45,10 +45,6 @@ class CG3(CG1):
         WSMC = self._instance.WSMC
 
         x0 = self._instance.map_assign()
-            
-        self._g=self._mip.addVars(nserv,vtype=GRB.BINARY,
-                                  lb=0,ub=1,name="g")
-
 
         self._h=self._mip.addVars(nserv,len(N),vtype=GRB.BINARY,
                                   lb=0,ub=1,name="h")
@@ -58,10 +54,18 @@ class CG3(CG1):
 
         self._smc = self._mip.addVar(name="smc",vtype=GRB.INTEGER,
                                      lb=0,obj=WSMC)
+        self._g=self._mip.addVars(nserv,vtype=GRB.BINARY,
+                                  lb=0,ub=1,name="g")
         
         self._mip.update()
 
-        self._h_lb_constr=self._mip.addConstrs((0 - self._h[s,n] >= 0
+        # LB:
+        # h[sn] > v*lbd
+        #
+        # UB:
+        # h[sn] < sum(v*lbd) 
+        
+        self._h_lb_constr=self._mip.addConstrs((0 - self._h[s,n] <= 0
                                                 for s in sorted(S)
                                                 for n in N
                                                 for m in N[n]),
@@ -133,3 +137,11 @@ class CG3(CG1):
         self._mip.update()
                                   
                     
+    def solve(self):
+        res = super().solve()
+        print()
+        for lbd in self._lbd.select():
+            if lbd.X > .5:
+                print("  opt:  %s " %(lbd.varname))
+
+        return res

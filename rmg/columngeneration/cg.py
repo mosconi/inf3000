@@ -17,6 +17,7 @@ class CG(object):
         self._instance = instance
         self._env=Env(args.logfile)
 
+        self._cb = lambda model, where: None
         self._mach=dict()
         self._procs=dict()
         for m in range(instance.nmach):
@@ -73,7 +74,6 @@ class CG(object):
         self._lp.computeIIS()
         self._lp.write("%s.ilp" %self._args.run_name)
 
-
     def solve(self):
         if not self._mip:
             raise Exception("MIP Model not defined")
@@ -102,3 +102,21 @@ class CG(object):
         if self._mip is None:
             return
         self._mip.printStats()
+
+    def lplog(self,msg):
+        if self._lp is None:
+            return
+        self._lp.message(msg)
+
+    def machlog(self,machine,msg):
+        if not hasattr(self._mach[machine],"model"):
+            return
+        if self._mach[machine].model is None:
+            return
+        self._mach[machine].model.message(msg)
+
+    def miplog(self,msg):
+        if self._mip is None:
+            return
+        self._mip.message(msg)
+        

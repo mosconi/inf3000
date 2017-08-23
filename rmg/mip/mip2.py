@@ -61,7 +61,9 @@ class MIP2(MIP):
         for p in range(nproc):
             for m in range(nmach):
                 self._x[p,m].Start = x0[p,m]
-        
+
+        if self._args.verbose:
+            print(" creating vars")
         self._z =self._mip.addVars(nproc,nmach,vtype=GRB.BINARY,name="z")
 
         self._t = self._mip.addVars(nmach,nmach,vtype=GRB.INTEGER,lb=0,ub=nproc,name="t")
@@ -84,48 +86,73 @@ class MIP2(MIP):
         self._mmc = self._mip.addVar(name="mmc",vtype=GRB.INTEGER,lb=0,obj=WMMC)
         
         self._mip.update()
+        if self._args.verbose:
+            print(" creating constraints")
+
+        if self._args.verbose>2:
+            print(" creating constraints process assign")
 
         self._mip.addConstrs((self._x.sum(p,'*') == 1
                              for p in range(nproc)),
                              name="p_assign")
+
+        if self._args.verbose>2:
+            print(" creating constraints utilization")
 
         self._mip.addConstrs((self._u[m,r] == quicksum(self._x[p,m]*R[p,r]
                                                        for p in range(nproc))
                               for r in range(nres) for m in range(nmach)),
                              name="util")
 
+        if self._args.verbose>2:
+            print(" creating constraints transient utilization")
+
         self._mip.addConstrs((self._ut[m,r] == quicksum(self._z[p,m]*R[p,r]
                                                         for p in range(nproc))
                               for r in range(nres) for m in range(nmach)),
                              name="transient")
         
+        if self._args.verbose>2:
+            print(" creating constraints capacity")
         self._mip.addConstrs((self._u[m,r]+ self._ut[m,r] <= C[m,r]
                               for r in range(nres) for m in range(nmach)),
                              name="cap")
 
+        if self._args.verbose>2:
+            print(" creating constraints availibility")
         self._mip.addConstrs((self._a[m,r] + self._u[m,r] == C[m,r]
                               for r in range(nres) for m in range(nmach)),
                              name="avail")
         
+        if self._args.verbose>2:
+            print(" creating constraints load")
         self._mip.addConstrs((self._u[m,r] - self._d[m,r] <= SC[m,r]
                               for r in range(nres) for m in range(nmach)),
                              name="load")
 
+        if self._args.verbose>2:
+            print(" creating constraints z")
         self._mip.addConstrs((self._z[p,m] >= x0[p,m] - self._x[p,m]
                               for  p in range(nproc) for m in range(nmach)),
                              name="z")
 
+        if self._args.verbose>2:
+            print(" creating constraints conflict")
         self._mip.addConstrs((self._x.sum(S[s],m) <= 1
                               for s in S
                               for m in range(nmach)),
                              name="conflict")
         
+        if self._args.verbose>2:
+            print(" creating constraints t")
         self._mip.addConstrs((self._t[i,j] == quicksum(x0[p,i]*self._x[p,j]
                                                        for p in range(nproc))
                               for i in range(nmach)
                               for j in range(nmach)),
                              name="t")
 
+        if self._args.verbose>2:
+            print(" creating constraints o")
         self._mip.addConstrs((self._o[s,l] <= self._x.sum(S[s],L[l])
                               for s in S
                               for l in L),
@@ -137,14 +164,20 @@ class MIP2(MIP):
                               for m in L[l]),
                              name="o_lb")
         
+        if self._args.verbose>2:
+            print(" creating constraints spread")
         self._mip.addConstrs((self._o.sum(s,'*') >= delta[s]
                               for s in S),
                              name="spread")
         
+        if self._args.verbose>2:
+            print(" creating constraints g")
         self._mip.addConstrs((self._g[s] == self._z.sum(S[s],'*')
                               for s in S),
                              name="g")
 
+        if self._args.verbose>2:
+            print(" creating constraints h")
         self._mip.addConstrs((self._h[s,n] <= self._x.sum(S[s],N[n])
                               for s in S
                               for n in N),
@@ -156,33 +189,47 @@ class MIP2(MIP):
                               for m in N[n]),
                              name="h_lb") 
 
+        if self._args.verbose>2:
+            print(" creating constraints dependency")
         self._mip.addConstrs((self._h[s,n] <= self._h[_s,n]
                               for n in N
                               for s in sdep
                               for _s in sdep[s]),
                              name="dep")
 
+        if self._args.verbose>2:
+            print(" creating constraints b")
         self._mip.addConstrs((self._b[m,r1,r2] >= bT[r1,r2]*self._a[m,r1] - self._a[m,r2]
                               for m in range(nmach)
                               for r1 in range(nres)
                               for r2 in range(nres)
                               ),name="b")
         
+        if self._args.verbose>2:
+            print(" creating constraints lc")
         self._mip.addConstrs((self._lc[r] == self._d.sum('*',r)
                               for r in range(nres)
                               ),name="lc")
 
+        if self._args.verbose>2:
+            print(" creating constraints bc")
         self._mip.addConstrs((self._bc[r1,r2] == self._b.sum('*',r1,r2)
                               for r1 in range(nres)
                               for r2 in range(nres)                              
                               ),name="bc")
 
+        if self._args.verbose>2:
+            print(" creating constraints pmc")
         self._mip.addConstr(self._pmc == quicksum(self._z.sum(p,'*')*PMC[p]
                                                   for p in range(nproc)),
                             name="pmc")
         
+        if self._args.verbose>2:
+            print(" creating constraints smc")
         self._mip.addConstrs((self._smc >= self._g[s] for s in S), name="smc")
 
+        if self._args.verbose>2:
+            print(" creating constraints mmc")
         self._mip.addConstr(self._mmc == quicksum(MMC[i,j]*self._t[i,j]
                                                   for i in range(nmach)
                                                   for j in range(nmach)),

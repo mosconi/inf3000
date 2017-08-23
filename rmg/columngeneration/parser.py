@@ -25,14 +25,10 @@ log_group.add_argument("--logfile",dest="logfile",action="store",default="column
 model = parser.add_argument_group("model","Options to change model behaviour")
 model.add_argument("--pregenerate",dest="generate",default=False,action="store_true",
                        help="Pre-generate some columns")
-model.add_argument("--dump",dest="dump",action="store_true",default=False,
-                    help="Dump models.")
 model.add_argument("--mipdump",dest="mipdump",action="store_true",default=False,
                     help="Dump MIP model.")
 model.add_argument("--runname",dest="run_name",default="columngeneration",
                     help="Name for the model")
-model.add_argument("--time",dest="time",default=False,action="store_true",
-                    help="Time the model")
 model.add_argument("--mipstats",dest="mipstats",default=False,action="store_true",
                     help="Print the MIP model stats")
 
@@ -50,3 +46,5 @@ stab.add_argument("--scale",dest="alpha_scale",default=1.0,type=float,
                   help="Scale to compute")
 stab.add_argument("--steps",dest="alpha_steps",default=1000,type=int,
                   help="Steps to compute")
+stab.add_argument("--maxsteps",dest="maxsteps",default=-1,type=int,
+                  help="MaxSteps to compute")

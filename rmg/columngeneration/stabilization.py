@@ -64,7 +64,7 @@ class Stabilization(object):
             
             old_alpha = self._alpha
         
-            if self._args.verbose >2:
+            if self._args.verbose > 4:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
             self._best_omega = omega
         self._alpha = new_alpha
@@ -88,7 +88,7 @@ class Stabilization(object):
             
             old_alpha = self._alpha
         
-            if self._args.verbose >2:
+            if self._args.verbose >4:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
             self._best_omega = omega
         self._alpha = new_alpha
@@ -112,7 +112,7 @@ class Stabilization(object):
             
             old_alpha = self._alpha
         
-            if self._args.verbose >2:
+            if self._args.verbose >4:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
             self._best_omega = omega
         self._alpha = new_alpha
@@ -135,7 +135,7 @@ class Stabilization(object):
             self._best_omikron_lb = stabdual.omikron_lb * new_alpha
             self._best_omikron_ub = stabdual.omikron_ub * new_alpha
         
-            if self._args.verbose >2:
+            if self._args.verbose >4:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
                 print("   alpha improment %.6f -> %.6f "%( old_alpha, new_alpha))
             self._best_omega = omega
@@ -160,7 +160,7 @@ class Stabilization(object):
             self._best_omikron_lb = stabdual.omikron_lb * new_alpha
             self._best_omikron_ub = stabdual.omikron_ub * new_alpha
         
-            if self._args.verbose >2:
+            if self._args.verbose >4:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
                 print("   alpha improment %.6f -> %.6f "%( old_alpha, new_alpha))
             self._best_omega = omega
@@ -187,7 +187,7 @@ class Stabilization(object):
             
             old_alpha = self._alpha
         
-            if self._args.verbose >2:
+            if self._args.verbose >4:
                 print("   omega improment %20.3f -> %20.3f "%( self._best_omega, omega))
             self._best_omega = omega
         self._alpha = new_alpha
