@@ -265,17 +265,40 @@ while continue_cond:
     if res.obj < first_obj and res.obj - int(res.obj) < 1.0e-6:
         break
 
+if args.verbose>1:
+    print("-"*(int(columns)-2))
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Extending LP model")
+cg.extend()
+if args.verbose>1:
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Done")
+
+if args.verbose>1:
+    print("-"*(int(columns)-2))
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Adding Cuts")
+cg.srcs()
+if args.verbose>1:
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Done")
+
+
 if args.dump:
     cg.lpwrite(k=-1)
 
     
-if args.verbose>2:
+if args.verbose>1:
     print("-"*(int(columns)-2))
     if args.time:
         print("%12.3f " % (time() - all_start), end='')
     print("Converting LP model to MIP model")
 cg.lp2mip()
-if args.verbose>2:
+if args.verbose>1:
     if args.time:
         print("%12.3f " % (time() - all_start), end='')
     print("Done")

@@ -28,17 +28,42 @@ class CG5(CG3):
         self._mach[machine].model.Params.Method = 2
         self._mach[machine].model._nproc = self._instance.nproc
 
+    def srcs(self):
+        self.__srcs()
 
+    def __srcs(self):
+
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+        nres = self._instance.nres
+        nserv = self._instance.nserv
+        sdep = self._instance.sdep
+        delta = self._instance.delta
+        L = self._instance.L
+        S = self._instance.S
+        N = self._instance.N
+        iL = self._instance.iL
+        iN = self._instance.iN
+        WSMC = self._instance.WSMC
+
+        print(sdep)
+        for s in sdep:
+            print(s,sdep[s])
+                
     def __lp2mip(self):
         self._mip = self._lp
 
         for v in self._mip.getVars():
             v.vtype = GRB.BINARY
 
-        return 
 
         for m in range(self._instance.nmach):
             self._lbd[m,0].Start=1
+    
+    def extend(self):
+        self.__extend()
+
+    def __extend(self):
 
         nproc = self._instance.nproc
         nmach = self._instance.nmach
@@ -55,48 +80,48 @@ class CG5(CG3):
 
         x0 = self._instance.map_assign()
             
-        self._h=self._mip.addVars(nserv,len(N),vtype=GRB.BINARY,
+        self._h=self._lp.addVars(nserv,len(N),vtype=GRB.CONTINUOUS,
                                   lb=0,ub=1,name="h")
 
-        self._o=self._mip.addVars(nserv,len(L),vtype=GRB.BINARY,
+        self._o=self._lp.addVars(nserv,len(L),vtype=GRB.CONTINUOUS,
                                   lb=0,ub=1,name="o")
         
-        self._mip.update()
+        self._lp.update()
 
-        self._h_lb_constr=self._mip.addConstrs((0 - self._h[s,n] >= 0
+        self._h_lb_constr=self._lp.addConstrs((0 - self._h[s,n] >= 0
                                                 for s in sorted(S)
                                                 for n in N
                                                 for m in N[n]),
                                                name="h_lb_constr")
-        self._h_ub_constr=self._mip.addConstrs((0 - self._h[s,n] >=0
+        self._h_ub_constr=self._lp.addConstrs((0 - self._h[s,n] >=0
                                                 for s in sorted(S)
                                                 for n in N),
                                                name="h_ub_constr")
 
 
-        self._o_ub_constr=self._mip.addConstrs((-self._o[s,l] + 0 >=0
+        self._o_ub_constr=self._lp.addConstrs((-self._o[s,l] + 0 >=0
                                                 for s in sorted(S)
                                                 for l in L),
                                                name="o_ub_constr")
-        self._o_lb_constr=self._mip.addConstrs((-self._o[s,l] + 0  <=0
+        self._o_lb_constr=self._lp.addConstrs((-self._o[s,l] + 0  <=0
                                                 for s in sorted(S)
                                                 for l in L
                                                 for m in L[l]),
                                                name="o_lb_constr")
 
-        self._dep_constr = self._mip.addConstrs((self._h[s,n] <= self._h[_s,n]
+        self._dep_constr = self._lp.addConstrs((self._h[s,n] <= self._h[_s,n]
                                                  for n in N
                                                  for s in sdep
                                                  for _s in sdep[s]),
                                                 name="dep")
 
         self._spread_constr = \
-                              self._mip.addConstrs((self._o.sum(s,'*') >= delta[s]
+                              self._lp.addConstrs((self._o.sum(s,'*') >= delta[s]
                              for s in sorted(S)),
                                                    name="spread")
 
         
-        self._mip.update()
+        self._lp.update()
         
         # for each column, complete the new constraints
 
@@ -119,12 +144,12 @@ class CG5(CG3):
                     if gserv >1:
                         print("s: %d, m: %d, gsum: %d" % (s,m,gserv))
                         print(S[s])
-                    self._mip.chgCoeff( self._h_lb_constr[s,iN[m],m], v, serv)
-                    self._mip.chgCoeff( self._h_ub_constr[s,iN[m]], v, serv)
-                    self._mip.chgCoeff( self._o_lb_constr[s,iL[m],m], v, serv)
-                    self._mip.chgCoeff( self._o_ub_constr[s,iL[m]], v, serv)
+                    self._lp.chgCoeff( self._h_lb_constr[s,iN[m],m], v, serv)
+                    self._lp.chgCoeff( self._h_ub_constr[s,iN[m]], v, serv)
+                    self._lp.chgCoeff( self._o_lb_constr[s,iL[m],m], v, serv)
+                    self._lp.chgCoeff( self._o_ub_constr[s,iL[m]], v, serv)
 
-        self._mip.update()
+        self._lp.update()
 
     def presolve(self):
         self.__presolve()
