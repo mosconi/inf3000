@@ -19,6 +19,12 @@ parser = argparse.ArgumentParser(description="",
 
 
 # Other parameters:
+parser.add_argument("--save",dest="savefile",
+                    type=argparse.FileType('w'),
+                    help="Save a LP model")
+parser.add_argument("--load",dest="loadfile",
+                    type=argparse.FileType('r'),
+                    help="Load a saved model")
 args = parser.parse_args()
 
 if args.verbose is None:
@@ -109,6 +115,7 @@ continue_cond = True
 
 res = cg.solve_relax()
 first_obj = res.obj
+best_int_obj = first_obj
 
 stab = CG.Stabilization(inst, args)
 
@@ -263,30 +270,30 @@ while continue_cond:
         break
 
     if res.obj < first_obj and res.obj - int(res.obj) < 1.0e-6:
-        break
+        best_int_obj = int(res.obj)
 
+_time1 = time()
 if args.verbose>1:
     print("-"*(int(columns)-2))
-    if args.time:
-        print("%12.3f " % (time() - all_start), end='')
-    print("Extending LP model")
-cg.extend()
 if args.verbose>1:
-    if args.time:
-        print("%12.3f " % (time() - all_start), end='')
-    print("Done")
-
-if args.verbose>1:
-    print("-"*(int(columns)-2))
     if args.time:
         print("%12.3f " % (time() - all_start), end='')
     print("Adding Cuts")
+ 
 cg.srcs()
+_time2 = time()
+
 if args.verbose>1:
     if args.time:
-        print("%12.3f " % (time() - all_start), end='')
+        print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
     print("Done")
 
+res = cg.solve_relax()
+_time3 = time()
+
+if args.verbose >1:
+    print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
+        
 
 if args.dump:
     cg.lpwrite(k=-1)
@@ -319,18 +326,6 @@ if args.mipstats:
 mip_start=time()
 #solution = cg.solve()
 
-if args.dump or args.mipdump:
-    cg.write()
-if args.mipstats:
-    if args.verbose>1:
-        print("-"*(int(columns)-2))
-    if args.verbose>2:
-        if args.time:
-            print("%12.3f " % (time() - all_start), end='')
-        print("MIP STATS")
-    cg.mip_stats()
-
-sys.exit(0)
 solution = cg.solve()
 
 if args.verbose>0:

@@ -46,9 +46,27 @@ class CG5(CG3):
         iN = self._instance.iN
         WSMC = self._instance.WSMC
 
-        print(sdep)
-        for s in sdep:
-            print(s,sdep[s])
+        self._lp.update()
+
+        self._3srcs_constr = tupledict()
+        import itertools
+        for i in itertools.combinations(sorted(S),3):
+            #print("iter services")
+            #print(i)
+            #print([S[i[0]],S[i[1]],S[i[2]]])
+            for j in itertools.product(S[i[0]],S[i[1]],S[i[2]]):
+                expr = LinExpr()
+                for _lbd in self._lbd.select():
+                    expr.addTerms(
+                        int(self._lp.getCoeff(self._p_constr[j[0]], _lbd)/2 +
+                            self._lp.getCoeff(self._p_constr[j[1]], _lbd)/2 +
+                            self._lp.getCoeff(self._p_constr[j[2]], _lbd)/2
+                            ),
+                        _lbd )
+
+                self._3srcs_constr[j] = self._lp.addConstr( expr <=1)
+
+            self._lp.update()
                 
     def __lp2mip(self):
         self._mip = self._lp
@@ -256,3 +274,10 @@ class CG5(CG3):
         self._mip.update()
 
         self._mip.Params.NumericFocus=3
+
+    def printrcs(self):
+        for m in range(self._instance.nmach):
+            for v in self._lbd.select(m,'*'):
+                print("%s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
+
+
