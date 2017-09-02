@@ -29,7 +29,7 @@ class CG5(CG3):
         self._mach[machine].model._nproc = self._instance.nproc
 
     def srcs(self):
-        self.__srcs()
+        self.__srcs2()
 
     def __srcs(self):
 
@@ -51,9 +51,9 @@ class CG5(CG3):
         self._3srcs_constr = tupledict()
         import itertools
         for i in itertools.combinations(sorted(S),3):
-            #print("iter services")
-            #print(i)
-            #print([S[i[0]],S[i[1]],S[i[2]]])
+            print("iter services")
+            print(i)
+            print([S[i[0]],S[i[1]],S[i[2]]])
             for j in itertools.product(S[i[0]],S[i[1]],S[i[2]]):
                 expr = LinExpr()
                 for _lbd in self._lbd.select():
@@ -67,7 +67,45 @@ class CG5(CG3):
                 self._3srcs_constr[j] = self._lp.addConstr( expr <=1)
 
             self._lp.update()
-                
+
+    def __srcs2(self):
+
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+        nres = self._instance.nres
+        nserv = self._instance.nserv
+        sdep = self._instance.sdep
+        delta = self._instance.delta
+        L = self._instance.L
+        S = self._instance.S
+        N = self._instance.N
+        iL = self._instance.iL
+        iN = self._instance.iN
+        WSMC = self._instance.WSMC
+
+        self._lp.update()
+
+        self._3srcs_constr = tupledict()
+        import itertools
+        _S = {k:v for k,v in S.items() if len(v) > 1}
+        for i in itertools.combinations(sorted(_S,key=lambda x: len(_S[x]),reverse=True),3):
+            print(i, [len(_S[i[0]]),len(_S[i[1]]),len(_S[i[2]])])
+            #print([S[i[0]],S[i[1]],S[i[2]]])
+            #print([len(S[i[0]]),len(S[i[1]]),len(S[i[2]])])
+            rhs1 = int(len(S[i[0]])/2 + len(S[i[1]])/2 + len(S[i[2]])/2)
+            expr = LinExpr()
+            for _lbd in self._lbd.select():
+                expr.addTerms( int(
+                    sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[0]]] )/2 +
+                    sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[1]]] )/2 +
+                    sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[2]]] )/2 
+                    ),
+                    _lbd )
+            #print(expr <= rhs1 )
+            self._3srcs_constr[i] = self._lp.addConstr( expr <= rhs1, name="3src[%d,%d,%d]" % i )
+
+            self._lp.update()
+
     def __lp2mip(self):
         self._mip = self._lp
 
@@ -280,4 +318,12 @@ class CG5(CG3):
             for v in self._lbd.select(m,'*'):
                 print("%s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
 
+    def filter(self):
+        for m in range(self._instance.nmach):
+            for v in self._lbd.select(m,'*'):
+                if v.RC> self._args.epslon:
+                    v.ub=0
+                print("%s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
+
+        self._lp.update()
 
