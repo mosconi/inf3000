@@ -449,11 +449,16 @@ class CG1(CG):
             print("inf or unbd")
         elif s == GRB.Status.INFEASIBLE:
             self.lpiis()
+        if s == GRB.Status.INFEASIBLE:
+            print("inf")
+        if s == GRB.Status.UNBOUNDED:
+            print("unbd")
         if s == GRB.Status.INF_OR_UNBD or \
            s == GRB.Status.INFEASIBLE or \
            s == GRB.Status.UNBOUNDED or \
            False:
             print("sdx")
+            self.lpiis()
             return None
 
         _obj = self._lp.objVal
