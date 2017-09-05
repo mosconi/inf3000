@@ -272,14 +272,26 @@ while continue_cond:
     if res.obj < first_obj and res.obj - int(res.obj) < 1.0e-6:
         best_int_obj = int(res.obj)
 
+input('Press Enter to continue')
+
 _time1 = time()
 if args.verbose>1:
     print("-"*(int(columns)-2))
 if args.verbose>1:
     if args.time:
         print("%12.3f " % (time() - all_start), end='')
-    print("Adding Cuts")
- 
+    print("Last RCs")
+
+cg.solve_relax()
+cg.printrcs()
+input('Press Enter to continue')
+if args.verbose>1:
+    print("-"*(int(columns)-2))
+if args.verbose>1:
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Adding cuts")
+
 cg.srcs()
 _time2 = time()
 
@@ -288,17 +300,62 @@ if args.verbose>1:
         print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
     print("Done")
 
+if args.verbose>1:
+    print("-"*(int(columns)-2))
+if args.verbose>1:
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("solving ")
+
 res = cg.solve_relax()
 _time3 = time()
 
 if args.verbose >1:
+    if args.time:
+        print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
     print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
         
 
 if args.dump:
     cg.lpwrite(k=-1)
 
-    
+if args.verbose>1:
+    print("-"*(int(columns)-2))
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("print RCS ")
+
+input('Press Enter to continue')
+   
+cg.printrcs()
+input('Press Enter to continue')
+
+cont_cond = True
+while cont_cond:
+
+
+    if args.verbose>1:
+        print("-"*(int(columns)-2))
+        if args.time:
+            print("%12.3f " % (time() - all_start), end='')
+        print("filter & solve ")
+
+    res = cg.filter()
+    if res == 0:
+        print("Nothing changed")
+        cont_cond = False
+    res = cg.solve_relax()
+
+
+    if args.verbose>1:
+        print("-"*(int(columns)-2))
+        if args.time:
+            print("%12.3f " % (time() - all_start), end='')
+        print("print RCS ")
+
+    cg.printrcs()
+    input('Press Enter to continue')
+
 if args.verbose>1:
     print("-"*(int(columns)-2))
     if args.time:
@@ -319,8 +376,8 @@ if args.mipstats:
         print("MIP STATS")
     cg.mip_stats()
 
-#if args.dump or args.mipdump:
-#    cg.write()
+if args.dump or args.mipdump:
+    cg.write()
     
 
 mip_start=time()

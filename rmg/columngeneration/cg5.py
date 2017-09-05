@@ -50,23 +50,29 @@ class CG5(CG3):
 
         self._3srcs_constr = tupledict()
         import itertools
-        for i in itertools.combinations(sorted(S),3):
-            print("iter services")
-            print(i)
-            print([S[i[0]],S[i[1]],S[i[2]]])
-            for j in itertools.product(S[i[0]],S[i[1]],S[i[2]]):
+        _S = S
+        __S = len(_S)
+        _total = (nproc)*(nproc-1)*(nproc-2)/(6)
+        #_S = {k:v for k,v in S.items() if len(v) > 1}
+        _c = 0
+        for i in itertools.combinations(sorted(_S,key=lambda x: len(_S[x]),reverse=True),3):
+            for j in itertools.product([S[i[0]],S[i[1]],S[i[2]]]):
+                _c+=1
+                if _c % __S ==0:
+                    print("  %15d de %15d" %(_c, _total))
+
                 expr = LinExpr()
                 for _lbd in self._lbd.select():
-                    expr.addTerms(
-                        int(self._lp.getCoeff(self._p_constr[j[0]], _lbd)/2 +
-                            self._lp.getCoeff(self._p_constr[j[1]], _lbd)/2 +
-                            self._lp.getCoeff(self._p_constr[j[2]], _lbd)/2
-                            ),
-                        _lbd )
+                    expr.addTerms( int((
+                        self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[0]] +
+                        self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[1]] +
+                        self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[2]]
+                    )*0.5),
+                            _lbd )
+            #print(expr <= rhs1 )
+            self._3srcs_constr[i] = self._lp.addConstr( expr <= rhs1, name="3src[%d,%d,%d]" % i )
 
-                self._3srcs_constr[j] = self._lp.addConstr( expr <=1)
-
-            self._lp.update()
+        self._lp.update()
 
     def __srcs2(self):
 
@@ -87,9 +93,15 @@ class CG5(CG3):
 
         self._3srcs_constr = tupledict()
         import itertools
-        _S = {k:v for k,v in S.items() if len(v) > 1}
+        _S = S
+        __S = len(_S)
+        _total = (__S)*(__S-1)*(__S-2)/(6)
+        #_S = {k:v for k,v in S.items() if len(v) > 1}
+        _c = 0
         for i in itertools.combinations(sorted(_S,key=lambda x: len(_S[x]),reverse=True),3):
-            print(i, [len(_S[i[0]]),len(_S[i[1]]),len(_S[i[2]])])
+            _c+=1
+            if _c % __S ==0:
+                print("  %15d de %15d" %(_c, _total))
             #print([S[i[0]],S[i[1]],S[i[2]]])
             #print([len(S[i[0]]),len(S[i[1]]),len(S[i[2]])])
             rhs1 = int(len(S[i[0]])/2 + len(S[i[1]])/2 + len(S[i[2]])/2)
@@ -104,7 +116,7 @@ class CG5(CG3):
             #print(expr <= rhs1 )
             self._3srcs_constr[i] = self._lp.addConstr( expr <= rhs1, name="3src[%d,%d,%d]" % i )
 
-            self._lp.update()
+        self._lp.update()
 
     def __lp2mip(self):
         self._mip = self._lp
@@ -316,14 +328,22 @@ class CG5(CG3):
     def printrcs(self):
         for m in range(self._instance.nmach):
             for v in self._lbd.select(m,'*'):
-                print("%s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
+                print("%s %6.3f in (%6.3f,%6.3f) %20.3f"%(v.VarName,v.X,v.lb,v.ub,v.RC))
 
     def filter(self):
+        cnt = 0
         for m in range(self._instance.nmach):
             for v in self._lbd.select(m,'*'):
                 if v.RC> self._args.epslon:
-                    v.ub=0
-                print("%s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
+                    if v.ub > self._args.epslon:
+                        cnt+=1
+                        v.ub=0
+                        print("removing: %s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
+                elif v.ub < self._args.epslon:
+                    cnt+=1
+                    v.ub = 1
+                    print("readding: %s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
 
         self._lp.update()
+        return cnt
 
