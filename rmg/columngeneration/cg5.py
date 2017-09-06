@@ -29,7 +29,7 @@ class CG5(CG3):
         self._mach[machine].model._nproc = self._instance.nproc
 
     def srcs(self):
-        self.__srcs2()
+        self.__srcs3()
 
     def __srcs(self):
 
@@ -118,6 +118,45 @@ class CG5(CG3):
 
         self._lp.update()
 
+    def __srcs3(self):
+
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+        nres = self._instance.nres
+        nserv = self._instance.nserv
+        sdep = self._instance.sdep
+        delta = self._instance.delta
+        L = self._instance.L
+        S = self._instance.S
+        N = self._instance.N
+        iL = self._instance.iL
+        iN = self._instance.iN
+        WSMC = self._instance.WSMC
+
+        self._lp.update()
+
+        self._3srcs_constr = tupledict()
+        import itertools
+        _total = (nserv)*(nmach)
+        #_S = {k:v for k,v in S.items() if len(v) > 1}
+        _c = 0
+        for m in range(nmach):
+            for s in S:
+                _c+=1
+                _q = 1
+                if _c % min(nmach,nserv) ==0:
+                    print("  %15d de %15d" %(_c, _total))
+                    
+                expr = LinExpr()
+                for _lbd in self._lbd.select(m,"*"):
+                    _q += sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[s]])
+                    expr.addTerms( int(_q * 0.5), _lbd )
+                print(expr <= 1 )
+                self._3srcs_constr[m,s] = self._lp.addConstr( expr <= 1, name="3src[%d,%d]" % (m,s) )
+
+        self._lp.update()
+
+        
     def __lp2mip(self):
         self._mip = self._lp
 
@@ -338,11 +377,11 @@ class CG5(CG3):
                     if v.ub > self._args.epslon:
                         cnt+=1
                         v.ub=0
-                        print("removing: %s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
+                        print("removing: %s %6.3f (%6.3f,%6.3f) %20.3f"%(v.VarName,v.X,v.lb,v.ub,v.RC))
                 elif v.ub < self._args.epslon:
                     cnt+=1
                     v.ub = 1
-                    print("readding: %s %6.3f %20.3f"%(v.VarName,v.X,v.RC))
+                    print("readding: %s %6.3f (%6.3f,%6.3f) %20.3f"%(v.VarName,v.X,v.lb,v.ub,v.RC))
 
         self._lp.update()
         return cnt

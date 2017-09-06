@@ -346,15 +346,20 @@ while cont_cond:
         cont_cond = False
     res = cg.solve_relax()
 
+    if args.verbose >1:
+        if args.time:
+            print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
+        print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
+        
 
-    if args.verbose>1:
+
+    if args.verbose>4:
         print("-"*(int(columns)-2))
         if args.time:
             print("%12.3f " % (time() - all_start), end='')
         print("print RCS ")
-
-    cg.printrcs()
-    input('Press Enter to continue')
+        cg.printrcs()
+        input('Press Enter to continue')
 
 if args.verbose>1:
     print("-"*(int(columns)-2))
