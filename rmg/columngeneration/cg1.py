@@ -498,8 +498,11 @@ class CG1(CG):
             0 for s in sorted(S)
         ],dtype=np.float64)
 
+        _allint = all([abs(round(v.x) - v.x ) < self._args.tol for v in self._lbd.select() ])
+
         return RelaxSolution(obj = _obj,
                              rtime = self._lp.RunTime,
+                             allint = _allint,
                              pi = _pi,
                              mu = _mu,
                              gamma = 0,

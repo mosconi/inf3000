@@ -2,7 +2,7 @@
 from collections import namedtuple
 from enum import Enum
 
-RelaxSolution = namedtuple('RelaxSolution',['obj','pi','mu','eta_lb','eta_ub','gamma','omikron_lb','omikron_ub','rtime'])
+RelaxSolution = namedtuple('RelaxSolution',['obj','pi','mu','eta_lb','eta_ub','gamma','omikron_lb','omikron_ub','rtime','allint'])
 
 CGColumn = namedtuple('CGColumn',['rc','obj','procs','g','servs','z','hsigma','ggamma','pixp','u','ut','a','d','b','pmc','mmc','rtime'])
 

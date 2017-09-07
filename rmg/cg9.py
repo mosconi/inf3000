@@ -148,7 +148,7 @@ while continue_cond:
     r_stop = time()
 
     if args.verbose >1:
-        print("%20.3f %20.3f %8.3f (%8.3f)   %.6f %17.3f" % (res.obj,first_obj, r_stop - r_start, res.rtime, alpha, res.obj - first_obj))
+        print("%20.3f %20.3f %8.3f (%8.3f)   %.6f %17.3f %s" % (res.obj,first_obj, r_stop - r_start, res.rtime, alpha, res.obj - first_obj, res.allint))
     if args.log:
         cg.lplog("\n/*"+"*"*70)
         cg.lplog(" *")
@@ -274,15 +274,34 @@ while continue_cond:
 
 input('Press Enter to continue')
 
+
 _time1 = time()
 if args.verbose>1:
     print("-"*(int(columns)-2))
 if args.verbose>1:
     if args.time:
         print("%12.3f " % (time() - all_start), end='')
-    print("Last RCs")
+    print("Solve")
 
 cg.solve_relax()
+if args.verbose>1:
+    print("-"*(int(columns)-2))
+if args.verbose>1:
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("Solution ")
+
+if res.allint:
+    cg.print_solution_relax()
+input('Press Enter to continue')
+
+if args.verbose>1:
+    print("-"*(int(columns)-2))
+if args.verbose>1:
+    if args.time:
+        print("%12.3f " % (time() - all_start), end='')
+    print("RCS")
+
 cg.printrcs()
 input('Press Enter to continue')
 if args.verbose>1:
@@ -327,8 +346,8 @@ if args.verbose>1:
 
 input('Press Enter to continue')
    
-cg.printrcs()
-input('Press Enter to continue')
+#cg.printrcs()
+#input('Press Enter to continue')
 
 cont_cond = True
 while cont_cond:
@@ -341,7 +360,7 @@ while cont_cond:
         print("filter & solve ")
 
     res = cg.filter()
-    if res == 0:
+    if res == 0 or True:
         print("Nothing changed")
         cont_cond = False
     res = cg.solve_relax()
@@ -349,7 +368,7 @@ while cont_cond:
     if args.verbose >1:
         if args.time:
             print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
-        print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
+        print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f %s" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj, res.allint))
         
 
 
@@ -360,6 +379,10 @@ while cont_cond:
         print("print RCS ")
         cg.printrcs()
         input('Press Enter to continue')
+
+if res.allint:
+    cg.print_solution_relax()
+
 
 if args.verbose>1:
     print("-"*(int(columns)-2))

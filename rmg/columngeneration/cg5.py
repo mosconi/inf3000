@@ -29,7 +29,7 @@ class CG5(CG3):
         self._mach[machine].model._nproc = self._instance.nproc
 
     def srcs(self):
-        self.__srcs3()
+        self.__srcs()
 
     def __srcs(self):
 
@@ -55,8 +55,9 @@ class CG5(CG3):
         _total = (nproc)*(nproc-1)*(nproc-2)/(6)
         #_S = {k:v for k,v in S.items() if len(v) > 1}
         _c = 0
+        rhs1 = 1
         for i in itertools.combinations(sorted(_S,key=lambda x: len(_S[x]),reverse=True),3):
-            for j in itertools.product([S[i[0]],S[i[1]],S[i[2]]]):
+            for j in itertools.product(S[i[0]],S[i[1]],S[i[2]]):
                 _c+=1
                 if _c % __S ==0:
                     print("  %15d de %15d" %(_c, _total))
@@ -64,13 +65,15 @@ class CG5(CG3):
                 expr = LinExpr()
                 for _lbd in self._lbd.select():
                     expr.addTerms( int((
-                        self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[0]] +
-                        self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[1]] +
-                        self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[2]]
+                        self._lp.getCoeff(self._p_constr[j[0]],_lbd)+
+                        self._lp.getCoeff(self._p_constr[j[1]],_lbd) +
+                        self._lp.getCoeff(self._p_constr[j[2]],_lbd)
                     )*0.5),
                             _lbd )
-            #print(expr <= rhs1 )
-            self._3srcs_constr[i] = self._lp.addConstr( expr <= rhs1, name="3src[%d,%d,%d]" % i )
+                #print(expr <= rhs1 )
+                self._3srcs_constr[j] = self._lp.addConstr( expr <= rhs1, name="3src[%d,%d,%d]" % j )
+
+        print("   adicionado %d cortes" % (_c))
 
         self._lp.update()
 

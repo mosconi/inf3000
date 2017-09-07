@@ -120,3 +120,10 @@ class CG(object):
             return
         self._mip.message(msg)
         
+    def print_solution_relax(self):
+        a = [] 
+        for v in self._lbd.select():
+            if v.X > .5:
+                a.append(v.VarName)
+
+        print(" ".join( a))
