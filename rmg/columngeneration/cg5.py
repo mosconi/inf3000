@@ -29,7 +29,7 @@ class CG5(CG3):
         self._mach[machine].model._nproc = self._instance.nproc
 
     def srcs(self):
-        self.__srcs()
+        self.__srcs3()
 
     def __srcs(self):
 
@@ -105,6 +105,7 @@ class CG5(CG3):
             _c+=1
             if _c % __S ==0:
                 print("  %15d de %15d" %(_c, _total))
+                input('Press Enter')
             #print([S[i[0]],S[i[1]],S[i[2]]])
             #print([len(S[i[0]]),len(S[i[1]]),len(S[i[2]])])
             rhs1 = int(len(S[i[0]])/2 + len(S[i[1]])/2 + len(S[i[2]])/2)
@@ -146,15 +147,16 @@ class CG5(CG3):
         for m in range(nmach):
             for s in S:
                 _c+=1
-                _q = 1
                 if _c % min(nmach,nserv) ==0:
                     print("  %15d de %15d" %(_c, _total))
+                    #input('Press Enter')
                     
                 expr = LinExpr()
                 for _lbd in self._lbd.select(m,"*"):
-                    _q += sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[s]])
+                    _q = 1+ sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[s]])
+                    #print("%s: %f" %(_lbd.VarName, _q))
                     expr.addTerms( int(_q * 0.5), _lbd )
-                print(expr <= 1 )
+                #print(expr <= 1 )
                 self._3srcs_constr[m,s] = self._lp.addConstr( expr <= 1, name="3src[%d,%d]" % (m,s) )
 
         self._lp.update()
