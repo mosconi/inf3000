@@ -104,10 +104,13 @@ class Instance:
         self.SM = np.zeros((self.nproc,self.nserv),dtype=np.int32)
         self.R=np.zeros((self.nproc,self.nres),dtype=np.int32)
         self.PMC=np.zeros(self.nproc,dtype=np.int32)
+        self.iS=np.zeros(self.nproc,dtype=np.int32)
+
         
         for p in range(nproc):
             l = lines.pop(0)
             s = l.pop(0)
+            self.iS[p] = s 
             self.S[s].append(p)
             self.SM[p,s]=1
             self.R[p]=l[:nres]

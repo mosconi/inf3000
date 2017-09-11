@@ -155,7 +155,6 @@ while continue_cond:
         cg.lplog(" *T:[MASTER:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %20.3f" % (k,_time - all_start, _time - loop_start ,res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
         cg.lplog(" *")
 
-
     rtime += res.rtime
     if res is None:
         raise Exception("LP não ótimo")
@@ -247,10 +246,12 @@ while continue_cond:
         continue_cond = False
 
     if continue_cond:
-        print("C %0.6f %5d %5d %0.3f" %(alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega()))
+        if args.verbose > 1:
+            print("C %0.6f %5d %5d %0.3f" %(alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega()))
         _c = "C"
     else:
-        print("T %0.6f %5d %5d %0.3f" %(alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega()))
+        if args.verbose > 1:
+            print("T %0.6f %5d %5d %0.3f" %(alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega()))
         _c = "T"
     if args.log:
         cg.lplog("\n/*"+"*"*70)
@@ -283,7 +284,17 @@ if args.verbose>1:
         print("%12.3f " % (time() - all_start), end='')
     print("Solve")
 
+_time2 = time()
 cg.solve_relax()
+_time3 = time()
+
+if args.verbose >1:
+    if args.time:
+        print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
+    print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
+        
+
+
 if args.verbose>1:
     print("-"*(int(columns)-2))
 if args.verbose>1:
@@ -302,7 +313,7 @@ if args.verbose>1:
         print("%12.3f " % (time() - all_start), end='')
     print("RCS")
 
-cg.printrcs()
+cg.printrcs2()
 input('Press Enter to continue')
 if args.verbose>1:
     print("-"*(int(columns)-2))
@@ -346,10 +357,10 @@ if args.verbose>1:
 
 input('Press Enter to continue')
    
-#cg.printrcs()
-#input('Press Enter to continue')
+cg.printrcs2()
+input('Press Enter to continue')
 
-cont_cond = True
+cont_cond = False
 while cont_cond:
 
 
