@@ -50,17 +50,15 @@ class CG5(CG3):
 
         self._3srcs_constr = tupledict()
         import itertools
-        _S = S
+        # _S = S
+        _S = {k:v for k,v in S.items() if len(v) > 1}
         __S = len(_S)
         _total = (nproc)*(nproc-1)*(nproc-2)/(6)
-        #_S = {k:v for k,v in S.items() if len(v) > 1}
         _c = 0
         rhs1 = 1
         for i in itertools.combinations(sorted(_S,key=lambda x: len(_S[x]),reverse=True),3):
             for j in itertools.product(S[i[0]],S[i[1]],S[i[2]]):
                 _c+=1
-                if _c % __S ==0:
-                    print("  %15d de %15d" %(_c, _total))
 
                 expr = LinExpr()
                 for _lbd in self._lbd.select():
@@ -73,8 +71,7 @@ class CG5(CG3):
                 #print(expr <= rhs1 )
                 self._3srcs_constr[j] = self._lp.addConstr( expr <= rhs1, name="3src[%d,%d,%d]" % j )
 
-            break
-        print("   adicionado %d cortes" % (_c))
+            print("   adicionado %d cortes" % (_c))
 
         self._lp.update()
 
