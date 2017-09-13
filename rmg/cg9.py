@@ -155,6 +155,8 @@ while continue_cond:
         cg.lplog(" *T:[MASTER:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %20.3f" % (k,_time - all_start, _time - loop_start ,res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
         cg.lplog(" *")
 
+    if  abs(first_obj - res.obj) > args.epslon: break
+
     rtime += res.rtime
     if res is None:
         raise Exception("LP não ótimo")
