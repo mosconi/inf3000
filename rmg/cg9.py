@@ -155,7 +155,7 @@ while continue_cond:
         cg.lplog(" *T:[MASTER:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %20.3f" % (k,_time - all_start, _time - loop_start ,res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
         cg.lplog(" *")
 
-    if  abs(first_obj - res.obj) > args.epslon: break
+    #if  abs(first_obj - res.obj) > args.epslon: break
 
     rtime += res.rtime
     if res is None:
@@ -287,112 +287,48 @@ if args.verbose>1:
     print("Solve")
 
 _time2 = time()
-cg.solve_relax()
-_time3 = time()
-
-if args.verbose >1:
-    if args.time:
-        print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
-    print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
-        
-
-
-if args.verbose>1:
-    print("-"*(int(columns)-2))
-if args.verbose>1:
-    if args.time:
-        print("%12.3f " % (time() - all_start), end='')
-    print("Solution ")
-
-if res.allint:
-    cg.print_solution_relax()
-input('Press Enter to continue')
-
-if args.verbose>1:
-    print("-"*(int(columns)-2))
-if args.verbose>1:
-    if args.time:
-        print("%12.3f " % (time() - all_start), end='')
-    print("RCS")
-
-cg.printrcs2()
-input('Press Enter to continue')
-if args.verbose>1:
-    print("-"*(int(columns)-2))
-if args.verbose>1:
-    if args.time:
-        print("%12.3f " % (time() - all_start), end='')
-    print("Adding cuts")
-
-cg.srcs()
-_time2 = time()
-
-if args.verbose>1:
-    if args.time:
-        print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
-    print("Done")
-
-if args.verbose>1:
-    print("-"*(int(columns)-2))
-if args.verbose>1:
-    if args.time:
-        print("%12.3f " % (time() - all_start), end='')
-    print("solving ")
-
 res = cg.solve_relax()
 _time3 = time()
 
 if args.verbose >1:
     if args.time:
-        print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
+        print("%12.3f %12.3f" % (time() - all_start, _time3-_time1), end=' ')
     print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
         
 
-if args.dump:
-    cg.lpwrite(k=-1)
 
 if args.verbose>1:
     print("-"*(int(columns)-2))
-    if args.time:
-        print("%12.3f " % (time() - all_start), end='')
-    print("print RCS ")
-
 input('Press Enter to continue')
-   
-cg.printrcs2()
-input('Press Enter to continue')
+if args.verbose>1:
+    print("-"*(int(columns)-2))
 
-cont_cond = False
+cont_cond = True
+c =0 
 while cont_cond:
-
-
+    c+=1
     if args.verbose>1:
         print("-"*(int(columns)-2))
         if args.time:
             print("%12.3f " % (time() - all_start), end='')
-        print("filter & solve ")
+        print("add - solve - filter")
 
-    res = cg.filter()
-    if res == 0 or True:
-        print("Nothing changed")
-        cont_cond = False
+    _time1 = time()
+    cg.cuts_add()
     res = cg.solve_relax()
-
+    _time2 = time()
+    
     if args.verbose >1:
         if args.time:
             print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
         print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f %s" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj, res.allint))
         
-
-
-    if args.verbose>4:
-        print("-"*(int(columns)-2))
-        if args.time:
-            print("%12.3f " % (time() - all_start), end='')
-        print("print RCS ")
-        cg.printrcs()
-        input('Press Enter to continue')
-
+    changed = cg.cuts_filter()
+    #if changed == 0:
+    #    cont_cond = False
+    if c >= 300:
+        break
+    
 if res.allint:
     cg.print_solution_relax()
 

@@ -4,6 +4,8 @@ from .solution import RelaxSolution,CGColumn,CGValidate,CGValidateStatus,CGAdd,C
 from .cg3 import CG3
 from gurobipy import *
 
+from itertools import combinations
+
 def _cb4(model,where):
     if where == GRB.Callback.MIPSOL:
         nodecnt = model.cbGet(GRB.Callback.MIPSOL_NODCNT)
@@ -15,6 +17,11 @@ class CG5(CG3):
     def __init__(self,instance,args):
         super().__init__(instance,args)
         self._cb = _cb4
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+
+        self._ppcounts = np.zeros((nproc, nproc), dtype=np.int32)
+        self._mpcounts = np.zeros((nmach, nproc), dtype=np.int32)
 
     def lp2mip(self):
         self.__lp2mip()
@@ -22,143 +29,244 @@ class CG5(CG3):
     def build_lpmodel(self):
         super().build_lpmodel()
         self._lp.Params.Method = 2
+        #self._lp.Params.Presolve =0 
+        self._lp._z_int = np.inf
+
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+        
+        for m in range(nmach):
+            _lbd = self._lbd[m,0]
+
+            for p0 in range(nproc):
+                q_p0 = int(round(self._lp.getCoeff(self._p_constr[p0],_lbd)))
+                if q_p0 == 0:
+                    continue
+                
+                self._mpcounts[m,p0]+=q_p0
+                for p1 in range(p0+1,nproc):
+                    q_p1 = int(round(self._lp.getCoeff(self._p_constr[p1],_lbd)))
+
+                    self._ppcounts[p0,p1]+= (q_p0 + q_p1)//2
+                               
+
+            
 
     def build_column_model(self,machine):
         super().build_column_model(machine)
         self._mach[machine].model.Params.Method = 2
         self._mach[machine].model._nproc = self._instance.nproc
 
-    def srcs(self):
-        self.__srcs()
-
-    def __srcs(self):
-
+    def cuts_prepare(self):
         nproc = self._instance.nproc
         nmach = self._instance.nmach
-        nres = self._instance.nres
-        nserv = self._instance.nserv
-        sdep = self._instance.sdep
-        delta = self._instance.delta
-        L = self._instance.L
-        S = self._instance.S
-        N = self._instance.N
-        iL = self._instance.iL
-        iN = self._instance.iN
-        WSMC = self._instance.WSMC
+        self._3srcs_pp_constr = tupledict()
+        self._3srcs_mp_constr = tupledict()
 
-        self._lp.update()
-
-        self._3srcs_constr = tupledict()
-        import itertools
-        # _S = S
-        _S = {k:v for k,v in S.items() if len(v) > 1}
-        __S = len(_S)
-        _total = (nproc)*(nproc-1)*(nproc-2)/(6)
-        _c = 0
-        rhs1 = 1
-        for i in itertools.combinations(sorted(_S,key=lambda x: len(_S[x]),reverse=True),3):
-            for j in itertools.product(S[i[0]],S[i[1]],S[i[2]]):
-                _c+=1
-
-                expr = LinExpr()
+        return 
+        for p1 in range(nproc):
+            print("%5d PP" % p1)
+            for p2 in range(p1+1, nproc):
+                c = 0 
                 for _lbd in self._lbd.select():
-                    expr.addTerms( int((
-                        self._lp.getCoeff(self._p_constr[j[0]],_lbd) +
-                        self._lp.getCoeff(self._p_constr[j[1]],_lbd) +
-                        self._lp.getCoeff(self._p_constr[j[2]],_lbd)
-                    )*0.5),
-                            _lbd )
-                #print(expr <= rhs1 )
-                self._3srcs_constr[j] = self._lp.addConstr( expr <= rhs1, name="3src[%d,%d,%d]" % j )
+                    if abs(1 - self._lp.getCoeff(self._p_constr[p1],_lbd))<self._args.tol and\
+                       abs(1 - self._lp.getCoeff(self._p_constr[p2],_lbd))<self._args.tol:
+                            c+=1
+                self._ppcounts[p1,p2] = c
 
-            print("   adicionado %d cortes" % (_c))
+            print("%5d MP" % p1)
+            for m in range(nmach):
+                c=0
+                for _lbd in self._lbd.select(m,'*'):
+                    if abs(1 - self._lp.getCoeff(self._p_constr[p1],_lbd)) < self._args.tol:
+                        c+=1
+                self._mpcounts[m,p1] = c
 
-        self._lp.update()
+    def cuts_add(self):
+        _max_pp = self._ppcounts.max()
+        _max_mp = self._mpcounts.max()
 
-    def __srcs2(self):
+        if _max_pp > _max_mp:
+            self.__cuts_add_pp()
+        else:
+            self.__cuts_add_mp()
 
+    def __cuts_add_pp(self):
         nproc = self._instance.nproc
         nmach = self._instance.nmach
-        nres = self._instance.nres
-        nserv = self._instance.nserv
-        sdep = self._instance.sdep
-        delta = self._instance.delta
-        L = self._instance.L
-        S = self._instance.S
-        N = self._instance.N
-        iL = self._instance.iL
-        iN = self._instance.iN
-        WSMC = self._instance.WSMC
+        _max_ltp = self._ppcounts.max()
+        
+        p1,p2 = np.unravel_index(self._ppcounts.argmax(), self._ppcounts.shape)
+        print("PP: [%d,%d]: %d" % (p1,p2,self._ppcounts[p1,p2]))
+        # p1 é sempre menor que p2, pois é uma matriz triangular superior
+        _tp = np.zeros(nproc,dtype=np.int32)
+        for p in range(nproc):
+            if p == p1: continue
+            if p == p2: continue
+            if p < p1:
+                _tp[p] = self._ppcounts[p1,p2] + self._ppcounts[p,p1] + self._ppcounts[p,p2]
+            elif p < p2:
+                _tp[p] = self._ppcounts[p1,p2] + self._ppcounts[p1,p] + self._ppcounts[p,p2]
+            else:
+                _tp[p] = self._ppcounts[p1,p2] + self._ppcounts[p1,p] + self._ppcounts[p2,p]
 
-        self._lp.update()
-
-        self._3srcs_constr = tupledict()
-        import itertools
-        _S = S
-        __S = len(_S)
-        _total = (__S)*(__S-1)*(__S-2)/(6)
-        #_S = {k:v for k,v in S.items() if len(v) > 1}
-        _c = 0
-        for i in itertools.combinations(sorted(_S,key=lambda x: len(_S[x]),reverse=True),3):
-            _c+=1
-            if _c % __S ==0:
-                print("  %15d de %15d" %(_c, _total))
-            #print([S[i[0]],S[i[1]],S[i[2]]])
-            #print([len(S[i[0]]),len(S[i[1]]),len(S[i[2]])])
-            rhs1 = int(len(S[i[0]])/2 + len(S[i[1]])/2 + len(S[i[2]])/2)
-            expr = LinExpr()
-            for _lbd in self._lbd.select():
-                expr.addTerms( int(
-                    sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[0]]] )/2 +
-                    sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[1]]] )/2 +
-                    sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[i[2]]] )/2 
-                    ),
-                    _lbd )
-            #print(expr <= rhs1 )
-            self._3srcs_constr[i] = self._lp.addConstr( expr >= rhs1, name="3src[%d,%d,%d]" % i )
-
-        self._lp.update()
-
-    def __srcs3(self):
-
-        nproc = self._instance.nproc
-        nmach = self._instance.nmach
-        nres = self._instance.nres
-        nserv = self._instance.nserv
-        sdep = self._instance.sdep
-        delta = self._instance.delta
-        L = self._instance.L
-        S = self._instance.S
-        N = self._instance.N
-        iL = self._instance.iL
-        iN = self._instance.iN
-        WSMC = self._instance.WSMC
-
-        self._lp.update()
-
-        self._3srcs_constr = tupledict()
-        import itertools
-        _total = (nserv)*(nmach)
-        _S = {k:v for k,v in S.items() if len(v) > 1}
-        _c = 0
+        _tm = np.zeros(nmach,dtype=np.int32)
         for m in range(nmach):
-            for s in _S:
-                _c+=1
-                if _c % min(nmach,nserv) ==0:
-                    print("  %15d de %15d" %(_c, _total))
-                    #input('Press Enter')
-                    
-                expr = LinExpr()
-                for _lbd in self._lbd.select(m,"*"):
-                    _q = 1+ sum([self._lp.getCoeff(self._p_constr[p],_lbd) for p in S[s]])
-                    #print("%s: %f" %(_lbd.VarName, _q))
-                    expr.addTerms( int(_q * 0.5), _lbd )
-                #print(expr <= 1 )
-                self._3srcs_constr[m,s] = self._lp.addConstr( expr >= 1, name="3src[%d,%d]" % (m,s) )
+            _tm[m] = self._ppcounts[p1,p2] + self._mpcounts[m,p1] + self._mpcounts[m,p1]
+
+                
+        _max_tp = _tp.max()
+        _max_tm = _tm.max()
+
+        import math
+        expr = LinExpr()
+        if _max_tp > _max_tm:
+            _p = _tp.argmax()
+            p = tuple(sorted([_p,p1,p2]))
+            _min_ltp = min([ self._ppcounts[p[0],p[1]],
+                             self._ppcounts[p[0],p[2]],
+                             self._ppcounts[p[1],p[2]]
+            ])
+
+            for _idx in self._lbd:
+                _lbd = self._lbd[_idx]
+                print((_idx, _lbd.VarName))
+                expr.addTerms(
+                    math.floor( (
+                        self._lp.getCoeff(self._p_constr[p[0]],_lbd) +
+                        self._lp.getCoeff(self._p_constr[p[1]],_lbd) +
+                        self._lp.getCoeff(self._p_constr[p[2]],_lbd)
+                        ) * 0.5
+                    )
+                    , _lbd
+                )
+            self._3srcs_pp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_pp[%d,%d,%d]" % p )
+            print("adiconado corte PPP (%d,%d,%d)"%p)
+            print("perimetro %d, delta %d" % (_tp.max(),_max_ltp - _min_ltp))
+            
+
+        else:
+            _m = _tm.argmax()
+            p = (_m,p1,p2)
+            
+            _min_ltp = min([ self._mpcounts[m,p1],
+                             self._mpcounts[m,p2]
+            ])
+            
+            for _idx in self._lbd:
+                _lbd = self._lbd[_idx]
+                print((_idx, _lbd.VarName))
+                expr.addTerms(
+                    math.floor( (
+                        self._lp.getCoeff(self._m_constr[_m],_lbd) +
+                        self._lp.getCoeff(self._p_constr[p1],_lbd) +
+                        self._lp.getCoeff(self._p_constr[p2],_lbd)
+                        ) * 0.5
+                    )
+                    , _lbd
+                )
+            self._3srcs_mp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_mp[%d,%d,%d]" % p )
+            print("adiconado corte MPP (%d,%d,%d)"%p)
+            print("perimetro %d, delta %d" % (_tm.max(),_max_ltp - _min_ltp))
+
+        self._ppcounts[p1,p2] = 0
 
         self._lp.update()
+        
+            
+        
+    def __cuts_add_mp(self):
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+
+        m,p1 = np.unravel_index(self._mpcounts.argmax(), self._mpcounts.shape)
+        _max_ltp = self._mpcounts.max()
+        print("MP: [%d,%d]: %d" % (m,p1,self._mpcounts[m,p1]))
+        
+        _tp = np.zeros(nproc,dtype=np.int32)
+        for p in range(nproc):
+            if p == p1: continue
+            if p < p1:
+                _tp[p] = self._mpcounts[m,p1] + self._mpcounts[m,p] + self._ppcounts[p,p1]
+            else:
+                _tp[p] = self._mpcounts[m,p1] + self._mpcounts[m,p] + self._ppcounts[p1,p]
+
+        import math
+        expr = LinExpr()
+
+        _p = _tp.argmax()
+        if p1 < _p : 
+            p = (m,p1,_p)
+        else:
+            p = (m,_p,p1)
+
+        _min_ltp = min([ self._mpcounts[p[0],p[1]],
+                         self._mpcounts[p[0],p[2]],
+                         self._ppcounts[p[1],p[2]]
+        ])
+
+        self._lp.update()
+        self._lbd.clean()
+        for _idx in self._lbd:
+            print(_idx)
+            _lbd = self._lbd[_idx]
+            
+            print((_idx, _lbd.VarName))
+            expr.addTerms(
+                math.floor( (
+                    self._lp.getCoeff(self._m_constr[m],_lbd) +
+                    self._lp.getCoeff(self._p_constr[p1],_lbd) +
+                    self._lp.getCoeff(self._p_constr[_p],_lbd)
+                ) * 0.5
+                )
+                , _lbd
+            )
+        self._3srcs_mp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_mp[%d,%d,%d]" % p )
+        print("adiconado corte MPP (%d,%d,%d)"%p)
+        print("perimetro %d, delta %d" % (_tp.max(), _max_ltp - _min_ltp))
+
+        self._mpcounts[m,p1] = 0
+
+        self._lp.update()
+
 
         
+    def cuts_filter(self):
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+
+        zlp =  self._lp.ObjVal
+        zinc = self._lp._z_int
+
+        gap  = zinc - zlp
+        print(" filter gap %6.3f" % (gap))
+
+        c = 0
+        for _idx in self._lbd:
+            if _idx[1] == 0 : continue
+            # mantém a solução inicial, para evitar problemas infeasible após o
+            # corte
+            m = _idx[0]
+            _lbd = self._lbd[_idx]
+            if _lbd.RC > gap and abs(1 - _lbd.ub) < self._args.tol :
+                c += 1
+                _lbd.ub = 0
+                print("removendo %s" %(_lbd.VarName))
+                for p1 in range(nproc):
+                    qp1 = self._lp.getCoeff(self._p_constr[p1], _lbd)
+                    if abs(1 - qp1) < self._args.tol:
+                        self._mpcounts[m,p1]-=1
+                        for p2 in range(p1,nproc):
+                            qp2 =  self._lp.getCoeff(self._p_constr[p2], _lbd)
+                            if abs(1 - qp2) < self._args.tol:
+                                self._ppcounts[p1,p2]-=1
+                self._lp.remove(_lbd)
+                                        
+        print(" filtered %d vars from %d" %( c , self._lp.NumVars))
+        self._lp.update()
+        return c
+        
+    
     def __lp2mip(self):
         self._mip = self._lp
 
@@ -394,3 +502,23 @@ class CG5(CG3):
         self._lp.update()
         return cnt
 
+
+    def lp_add_col(self,mach,colres):
+        ares = super().lp_add_col(mach,colres)
+        
+        nproc = self._instance.nproc
+
+        for p0 in range(nproc):
+            q_p0 = colres.procs[p0]
+            if q_p0 == 0: continue
+            self._mpcounts[mach,p0]+=q_p0
+            for p1 in range(p0+1,nproc):
+                q_p1 = colres.procs[p1]
+                #print((q_p0,q_p1))
+                self._ppcounts[p0,p1] += (q_p0 + q_p1 )//2
+                #print(self._ppcounts[idx])
+            
+        for p in range(nproc):
+            self._mpcounts[mach,p]+=colres.procs[p]
+
+        return ares

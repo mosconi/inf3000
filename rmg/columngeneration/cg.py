@@ -1,8 +1,9 @@
 
 #from collection import defaultdict
 from .solution import CGSolution
-from gurobipy import Env
+from gurobipy import Env,GRB
 import numpy as np
+
 
 class CG(object):
     _instance = None
@@ -74,11 +75,31 @@ class CG(object):
         self._lp.computeIIS()
         self._lp.write("%s.ilp" %self._args.run_name)
 
+    def mipiis(self):
+        if not self._mip:
+            raise Exception("MIP Model not defined")
+        
+        self._mip.computeIIS()
+        self._mip.write("%s.ilp" %self._args.run_name)
+
     def solve(self):
         if not self._mip:
             raise Exception("MIP Model not defined")
 
         self._mip.optimize()
+        status = self._mip.Status
+        if status == GRB.UNBOUNDED:
+            raise Exception("UNBOUNDED")
+
+        elif status == GRB.INFEASIBLE:
+            self.mipiis()
+            raise Exception("INFEASIBLE")
+
+        elif status == GRB.INF_OR_UNBD:
+            self.mipiis()
+            raise Exception("INF OR UNBD")
+
+                    
 
         _obj = self._mip.ObjVal
 

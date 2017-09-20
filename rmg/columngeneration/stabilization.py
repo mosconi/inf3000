@@ -10,8 +10,6 @@ StabDual = namedtuple('StabDual',["pi",
                                   "omikron_lb",
                                   "omikron_ub"])
 
-
-
 class Stabilization(object):
 
     def __init__(self,instance,args):
@@ -203,3 +201,4 @@ class Stabilization(object):
         return self._improvements
     def nonimprovements(self):
         return self._iterations - self._last_improvement
+

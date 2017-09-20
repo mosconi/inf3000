@@ -498,8 +498,15 @@ class CG1(CG):
             0 for s in sorted(S)
         ],dtype=np.float64)
 
-        _allint = all([abs(round(v.x) - v.x ) < self._args.tol for v in self._lbd.select() ])
+        if abs(_obj - int(_obj))< self._args.tol:
+            _allint = all([abs(round(v.x) - v.x ) < self._args.tol for v in self._lbd.select() ])
+            if _obj < self._lp._z_int:
+                self._lp._z_int = _obj
+        else:
+            _allint = False
+            
 
+        
         return RelaxSolution(obj = _obj,
                              rtime = self._lp.RunTime,
                              allint = _allint,
