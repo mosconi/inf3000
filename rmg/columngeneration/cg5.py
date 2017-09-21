@@ -31,9 +31,11 @@ class CG5(CG3):
         self._lp.Params.Method = 2
         #self._lp.Params.Presolve =0 
         self._lp._z_int = np.inf
-
+        self._removed = 0
         nproc = self._instance.nproc
         nmach = self._instance.nmach
+        self._3srcs_pp_constr = tupledict()
+        self._3srcs_mp_constr = tupledict()
         
         for m in range(nmach):
             _lbd = self._lbd[m,0]
@@ -47,7 +49,7 @@ class CG5(CG3):
                 for p1 in range(p0+1,nproc):
                     q_p1 = int(round(self._lp.getCoeff(self._p_constr[p1],_lbd)))
 
-                    self._ppcounts[p0,p1]+= (q_p0 + q_p1)//2
+                    self._ppcounts[p0,p1]+= q_p1
                                
 
             
@@ -85,11 +87,12 @@ class CG5(CG3):
     def cuts_add(self):
         _max_pp = self._ppcounts.max()
         _max_mp = self._mpcounts.max()
+        return self.__cuts_add_pp()
 
         if _max_pp > _max_mp:
-            self.__cuts_add_pp()
+            return self.__cuts_add_pp()
         else:
-            self.__cuts_add_mp()
+            return self.__cuts_add_mp()
 
     def __cuts_add_pp(self):
         nproc = self._instance.nproc
@@ -97,7 +100,7 @@ class CG5(CG3):
         _max_ltp = self._ppcounts.max()
         
         p1,p2 = np.unravel_index(self._ppcounts.argmax(), self._ppcounts.shape)
-        print("PP: [%d,%d]: %d" % (p1,p2,self._ppcounts[p1,p2]))
+        #print("PP: [%d,%d]: %d" % (p1,p2,self._ppcounts[p1,p2]))
         # p1 é sempre menor que p2, pois é uma matriz triangular superior
         _tp = np.zeros(nproc,dtype=np.int32)
         for p in range(nproc):
@@ -119,6 +122,7 @@ class CG5(CG3):
         _max_tm = _tm.max()
 
         import math
+        _max_tm =0 
         expr = LinExpr()
         if _max_tp > _max_tm:
             _p = _tp.argmax()
@@ -130,19 +134,20 @@ class CG5(CG3):
 
             for _idx in self._lbd:
                 _lbd = self._lbd[_idx]
-                print((_idx, _lbd.VarName))
-                expr.addTerms(
-                    math.floor( (
+                q = math.floor( (
                         self._lp.getCoeff(self._p_constr[p[0]],_lbd) +
                         self._lp.getCoeff(self._p_constr[p[1]],_lbd) +
                         self._lp.getCoeff(self._p_constr[p[2]],_lbd)
                         ) * 0.5
                     )
-                    , _lbd
-                )
-            self._3srcs_pp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_pp[%d,%d,%d]" % p )
-            print("adiconado corte PPP (%d,%d,%d)"%p)
-            print("perimetro %d, delta %d" % (_tp.max(),_max_ltp - _min_ltp))
+                expr.addTerms(q , _lbd)
+            if expr.getValue() < 1: 
+                #print("não adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+                expr = None
+            else:
+                self._3srcs_pp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_pp[%d,%d,%d]" % p )
+                #print("adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+                #print("perimetro %d, delta %d" % (_tp.max(),_max_ltp - _min_ltp))
             
 
         else:
@@ -155,7 +160,6 @@ class CG5(CG3):
             
             for _idx in self._lbd:
                 _lbd = self._lbd[_idx]
-                print((_idx, _lbd.VarName))
                 expr.addTerms(
                     math.floor( (
                         self._lp.getCoeff(self._m_constr[_m],_lbd) +
@@ -166,13 +170,14 @@ class CG5(CG3):
                     , _lbd
                 )
             self._3srcs_mp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_mp[%d,%d,%d]" % p )
-            print("adiconado corte MPP (%d,%d,%d)"%p)
-            print("perimetro %d, delta %d" % (_tm.max(),_max_ltp - _min_ltp))
+            #print("adiconado corte MPP (%d,%d,%d)"%p)
+            #print("perimetro %d, delta %d" % (_tm.max(),_max_ltp - _min_ltp))
 
-        self._ppcounts[p1,p2] = 0
+        self._ppcounts[p1,p2] = -self._ppcounts[p1,p2] 
 
         self._lp.update()
         
+        return expr
             
         
     def __cuts_add_mp(self):
@@ -205,13 +210,8 @@ class CG5(CG3):
                          self._ppcounts[p[1],p[2]]
         ])
 
-        self._lp.update()
-        self._lbd.clean()
         for _idx in self._lbd:
-            print(_idx)
             _lbd = self._lbd[_idx]
-            
-            print((_idx, _lbd.VarName))
             expr.addTerms(
                 math.floor( (
                     self._lp.getCoeff(self._m_constr[m],_lbd) +
@@ -225,7 +225,7 @@ class CG5(CG3):
         print("adiconado corte MPP (%d,%d,%d)"%p)
         print("perimetro %d, delta %d" % (_tp.max(), _max_ltp - _min_ltp))
 
-        self._mpcounts[m,p1] = 0
+        self._mpcounts[m,p1] = -1
 
         self._lp.update()
 
@@ -248,10 +248,11 @@ class CG5(CG3):
             # corte
             m = _idx[0]
             _lbd = self._lbd[_idx]
+            if abs(_lbd.X) <  self._args.tol: continue
             if _lbd.RC > gap and abs(1 - _lbd.ub) < self._args.tol :
                 c += 1
                 _lbd.ub = 0
-                print("removendo %s" %(_lbd.VarName))
+                #print("removendo %s" %(_lbd.VarName))
                 for p1 in range(nproc):
                     qp1 = self._lp.getCoeff(self._p_constr[p1], _lbd)
                     if abs(1 - qp1) < self._args.tol:
@@ -260,9 +261,10 @@ class CG5(CG3):
                             qp2 =  self._lp.getCoeff(self._p_constr[p2], _lbd)
                             if abs(1 - qp2) < self._args.tol:
                                 self._ppcounts[p1,p2]-=1
-                self._lp.remove(_lbd)
-                                        
-        print(" filtered %d vars from %d" %( c , self._lp.NumVars))
+                #self._lp.remove(_lbd)
+
+        self._removed += c
+        print(" filtered %d vars from %d (left: %d)" %( c , self._lp.NumVars,self._lp.NumVars - self._removed ))
         self._lp.update()
         return c
         
@@ -515,7 +517,7 @@ class CG5(CG3):
             for p1 in range(p0+1,nproc):
                 q_p1 = colres.procs[p1]
                 #print((q_p0,q_p1))
-                self._ppcounts[p0,p1] += (q_p0 + q_p1 )//2
+                self._ppcounts[p0,p1] += q_p1 
                 #print(self._ppcounts[idx])
             
         for p in range(nproc):
