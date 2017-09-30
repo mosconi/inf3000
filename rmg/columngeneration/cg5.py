@@ -50,9 +50,6 @@ class CG5(CG3):
                     q_p1 = int(round(self._lp.getCoeff(self._p_constr[p1],_lbd)))
 
                     self._ppcounts[p0,p1]+= q_p1
-                               
-
-            
 
     def build_column_model(self,machine):
         super().build_column_model(machine)
@@ -62,32 +59,20 @@ class CG5(CG3):
     def cuts_prepare(self):
         nproc = self._instance.nproc
         nmach = self._instance.nmach
-        self._3srcs_pp_constr = tupledict()
-        self._3srcs_mp_constr = tupledict()
 
-        return 
-        for p1 in range(nproc):
-            print("%5d PP" % p1)
-            for p2 in range(p1+1, nproc):
-                c = 0 
-                for _lbd in self._lbd.select():
-                    if abs(1 - self._lp.getCoeff(self._p_constr[p1],_lbd))<self._args.tol and\
-                       abs(1 - self._lp.getCoeff(self._p_constr[p2],_lbd))<self._args.tol:
-                            c+=1
-                self._ppcounts[p1,p2] = c
+        for m in range(nmach):
+            print("len LBD_m: %d" %(len(self._lbd.select(m,'*'))))
 
-            print("%5d MP" % p1)
-            for m in range(nmach):
-                c=0
-                for _lbd in self._lbd.select(m,'*'):
-                    if abs(1 - self._lp.getCoeff(self._p_constr[p1],_lbd)) < self._args.tol:
-                        c+=1
-                self._mpcounts[m,p1] = c
+            print(any(self._mpcounts[m,]>len(self._lbd.select(m,'*'))))
+            print(self._mpcounts[m,]>len(self._lbd.select(m,'*')))
+            print(self._mpcounts[m,])
+
 
     def cuts_add(self):
         _max_pp = self._ppcounts.max()
         _max_mp = self._mpcounts.max()
-        return self.__cuts_add_pp()
+        if _max_pp ==0 or _max_mp ==0:
+            raise Exception("No more cuts")
 
         if _max_pp > _max_mp:
             return self.__cuts_add_pp()
@@ -122,7 +107,6 @@ class CG5(CG3):
         _max_tm = _tm.max()
 
         import math
-        _max_tm =0 
         expr = LinExpr()
         if _max_tp > _max_tm:
             _p = _tp.argmax()
@@ -141,12 +125,13 @@ class CG5(CG3):
                         ) * 0.5
                     )
                 expr.addTerms(q , _lbd)
-            if expr.getValue() < 1: 
-                #print("não adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+            if expr.getValue() < 1 + self._args.tol: 
+                print("não adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
                 expr = None
             else:
                 self._3srcs_pp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_pp[%d,%d,%d]" % p )
-                #print("adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+                    
+                print("adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
                 #print("perimetro %d, delta %d" % (_tp.max(),_max_ltp - _min_ltp))
             
 
@@ -169,9 +154,13 @@ class CG5(CG3):
                     )
                     , _lbd
                 )
-            self._3srcs_mp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_mp[%d,%d,%d]" % p )
-            #print("adiconado corte MPP (%d,%d,%d)"%p)
-            #print("perimetro %d, delta %d" % (_tm.max(),_max_ltp - _min_ltp))
+            if expr.getValue() < 1 + self._args.tol: 
+                print("não adicionado corte MPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+                expr = None
+            else:
+                self._3srcs_mp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_mp[%d,%d,%d]" % p )
+                print("adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+                #print("perimetro %d, delta %d" % (_tp.max(),_max_ltp - _min_ltp))
 
         self._ppcounts[p1,p2] = -self._ppcounts[p1,p2] 
 
@@ -186,7 +175,6 @@ class CG5(CG3):
 
         m,p1 = np.unravel_index(self._mpcounts.argmax(), self._mpcounts.shape)
         _max_ltp = self._mpcounts.max()
-        print("MP: [%d,%d]: %d" % (m,p1,self._mpcounts[m,p1]))
         
         _tp = np.zeros(nproc,dtype=np.int32)
         for p in range(nproc):
@@ -221,13 +209,19 @@ class CG5(CG3):
                 )
                 , _lbd
             )
-        self._3srcs_mp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_mp[%d,%d,%d]" % p )
-        print("adiconado corte MPP (%d,%d,%d)"%p)
-        print("perimetro %d, delta %d" % (_tp.max(), _max_ltp - _min_ltp))
+        if expr.getValue() < 1 + self._args.tol: 
+            print("não adicionado corte MPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+            expr = None
+        else:
+            self._3srcs_mp_constr[p] = self._lp.addConstr( expr <= 1, name="3src_mp[%d,%d,%d]" % p )
+            print("adicionado corte PPP (%d,%d,%d): %6.3f "% (p[0],p[1],p[2] , expr.getValue()))
+            #print("perimetro %d, delta %d" % (_tp.max(),_max_ltp - _min_ltp))
 
-        self._mpcounts[m,p1] = -1
-
+        self._mpcounts[m,p1] = - self._mpcounts[m,p1]
+        
         self._lp.update()
+
+        return expr
 
 
         
@@ -238,6 +232,9 @@ class CG5(CG3):
         zlp =  self._lp.ObjVal
         zinc = self._lp._z_int
 
+        self._mpcounts[self._mpcounts<0] = -self._mpcounts[self._mpcounts<0]
+        self._ppcounts[self._ppcounts<0] = -self._ppcounts[self._ppcounts<0]
+        
         gap  = zinc - zlp
         print(" filter gap %6.3f" % (gap))
 
@@ -266,6 +263,7 @@ class CG5(CG3):
         self._removed += c
         print(" filtered %d vars from %d (left: %d)" %( c , self._lp.NumVars,self._lp.NumVars - self._removed ))
         self._lp.update()
+        
         return c
         
     
@@ -510,17 +508,123 @@ class CG5(CG3):
         
         nproc = self._instance.nproc
 
+        self._mpcounts[mach,]+=colres.procs
+        
         for p0 in range(nproc):
             q_p0 = colres.procs[p0]
             if q_p0 == 0: continue
-            self._mpcounts[mach,p0]+=q_p0
             for p1 in range(p0+1,nproc):
                 q_p1 = colres.procs[p1]
-                #print((q_p0,q_p1))
                 self._ppcounts[p0,p1] += q_p1 
-                #print(self._ppcounts[idx])
             
-        for p in range(nproc):
-            self._mpcounts[mach,p]+=colres.procs[p]
 
         return ares
+
+    def extend(self):
+
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+        nres = self._instance.nres
+        nserv = self._instance.nserv
+        sdep = self._instance.sdep
+        delta = self._instance.delta
+        L = self._instance.L
+        S = self._instance.S
+        N = self._instance.N
+        iL = self._instance.iL
+        iN = self._instance.iN
+        WSMC = self._instance.WSMC
+
+        x0 = self._instance.map_assign()
+
+        self._h=self._lp.addVars(nserv,len(N),vtype=GRB.CONTINUOUS,
+                                  lb=0,ub=1,name="h")
+
+        self._o=self._lp.addVars(nserv,len(L),vtype=GRB.CONTINUOUS,
+                                  lb=0,ub=1,name="o")
+
+        self._smc = self._lp.addVar(name="smc",vtype=GRB.CONTINUOUS,
+                                     lb=0,obj=WSMC)
+        self._g=self._lp.addVars(nserv,vtype=GRB.CONTINUOUS,
+                                  lb=0,ub=1,name="g")
+        
+        self._lp.update()
+
+        # LB:
+        # h[sn] > v*lbd
+        #
+        # UB:
+        # h[sn] < sum(v*lbd) 
+        
+        self._h_lb_constr=self._lp.addConstrs((0 - self._h[s,n] <= 0
+                                                for s in sorted(S)
+                                                for n in N
+                                                for m in N[n]),
+                                               name="h_lb_constr")
+        self._h_ub_constr=self._lp.addConstrs((0 - self._h[s,n] >=0
+                                                for s in sorted(S)
+                                                for n in N),
+                                               name="h_ub_constr")
+
+
+        self._o_ub_constr=self._lp.addConstrs((-self._o[s,l] + 0 >=0
+                                                for s in sorted(S)
+                                                for l in L),
+                                               name="o_ub_constr")
+        self._o_lb_constr=self._lp.addConstrs((-self._o[s,l] + 0  <=0
+                                                for s in sorted(S)
+                                                for l in L
+                                                for m in L[l]),
+                                               name="o_lb_constr")
+
+        self._dep_constr = self._lp.addConstrs((self._h[s,n] <= self._h[_s,n]
+                                                 for n in N
+                                                 for s in sdep
+                                                 for _s in sdep[s]),
+                                                name="dep")
+
+        self._spread_constr = \
+                              self._lp.addConstrs((self._o.sum(s,'*') >= delta[s]
+                             for s in sorted(S)),
+                                                   name="spread")
+
+        self._g_constr = self._lp.addConstrs((-self._g[s] == 0 
+                                              for s in sorted(S)),
+                                              name="g")
+
+        self._smc_constr = self._lp.addConstrs((self._smc >= self._g[s]
+                                                for s in sorted(S)),
+                                                name="smc")
+        
+        self._lp.update()
+        
+        # for each column, complete the new constraints
+
+        
+        for m in range(self._instance.nmach):
+            for v in self._lbd.select(m,'*'):
+                procs = np.array(v._procs).flatten()
+                z = procs - x0[:,m]
+                z[z<0] = 0
+                for s in sorted(S):
+                     # é binário, por causa da restrição de conflito
+                    serv = procs[S[s]].sum()
+                    if serv >1:
+                        print("s: %d, m: %d, sum: %d" % (s,m,serv))
+                        print(v.VarName)
+                        print(S[s])
+                        for p in S[s]:
+                            print(procs[p])
+                    gserv = z[S[s]].sum()
+                    if gserv >1:
+                        print("s: %d, m: %d, gsum: %d" % (s,m,gserv))
+                        print(S[s])
+                    self._lp.chgCoeff( self._h_lb_constr[s,iN[m],m], v, serv)
+                    self._lp.chgCoeff( self._h_ub_constr[s,iN[m]], v, serv)
+                    self._lp.chgCoeff( self._o_lb_constr[s,iL[m],m], v, serv)
+                    self._lp.chgCoeff( self._o_ub_constr[s,iL[m]], v, serv)
+                    self._lp.chgCoeff( self._g_constr[s], v, gserv)
+
+        self._lp.update()
+                                  
+        

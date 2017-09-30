@@ -2,6 +2,9 @@
 
 import argparse,os,sys
 import numpy as np
+
+np.set_printoptions(formatter={'float_kind': lambda x: "%+17.3f" % x,'int': lambda x: "%+17d" % x, })
+
 from time import time
 
 from rmg import roadef,common,instance,Instance,columngeneration
@@ -20,97 +23,64 @@ parser = argparse.ArgumentParser(description="",
 
 # Other parameters:
 parser.add_argument("--save",dest="savefile",
-                    type=argparse.FileType('w'),
                     help="Save a LP model")
 parser.add_argument("--load",dest="loadfile",
-                    type=argparse.FileType('r'),
                     help="Load a saved model")
 args = parser.parse_args()
 
 if args.verbose is None:
     args.verbose = 1
 
-if args.name:
-    print("Rodrigo Mosconi (1512344) <rmosconi@inf.puc-rio.br>")
-    print(args)
-    sys.exit(0)
 
-rows, columns = os.popen('stty size', 'r').read().split()
-np.set_printoptions(linewidth=int(columns)-5, formatter={'float_kind': lambda x: "%+17.3f" % x,'int': lambda x: "%+17d" % x, })
+all_start =0
+def msg(level, msg, timeref=None):
+    global all_start 
 
-all_start = time()
-if args.verbose >2:
-    if args.time:
-        print("%12.3f " % (time() - all_start),end='')
-    print("Load Instance data")
-inst = Instance(args)
-
-
-cg = CG.CG5(instance=inst,args=args)
-
-if args.verbose >0:
-    _time = time() - all_start
-    if args.time:
-        print("%12.3f " % (_time),end='')
-    print("building LP Model")
-    if args.log:
-        cg.lplog("\n/*"+"*"*70)
-        cg.lplog(" *")
-        cg.lplog(" * %12.3f build LP Model" % _time)
-        cg.lplog(" *")
-        
-
-cg.build_lpmodel()
-
-for m in range(inst.nmach):
-    if args.verbose >1:
+    if args.verbose >level:
         if args.time:
-            _time = time() - all_start
-            print("%12.3f " % (_time),end='')
-        print("building machine %5d (of %5d) MIP model" % (m,inst.nmach))
-    if args.log:
-        cg.lplog("\n/*"+"*"*70)
-        cg.lplog(" *")
-        cg.lplog(" * %12.3f building machine %5d (of %5d) MIP model" % (_time,m,inst.nmach))
-        cg.lplog(" *")
-        
-    cg.build_column_model(m)
-    if args.generate:
-        if args.verbose >2:
-            if args.time:
-                print("%12.3f " %( time() - all_start),end='')
-            print(" Pregenerate columns")
-            
-        m_assign = inst.mach_map_assign(m)
-        for p in range(inst.nproc):
-            m_assign[p] = not m_assign[p]
-            mval = inst.mach_validate(machine=m,map_assign=m_assign)
-            if mval.status:
-                cres = CG.CGColumn(obj=mval.obj,
-                                   procs = m_assign,
-                                   rc = 0,
-                                   g = None,
-                                   servs = None,
-                                   z = None,
-                                   hsigma = None,
-                                   ggamma = None,
-                                   pixp = None,
-                                   u = None,
-                                   ut = None,
-                                   a = None,
-                                   d = None,
-                                   b = None,
-                                   pmc = None,
-                                   mmc = None,
-                                   rtime = None
-                )
+            _time = time()
+            print("%12.3f " % (_time  - all_start),end='')
+            if timeref is not None:
+                print("%12.3f " % (_time - t),end='')
                 
-                cg.lp_add_col(m,cres)
-            m_assign[p] = not m_assign[p]
+        print(msg)
+    
+def line():
+    rows, columns = os.popen('stty size', 'r').read().split()
+    print("-"*(int(columns)-2))
+    
+        
+def main():
+    print("teste")
+    if args.name:
+        print("Rodrigo Mosconi (1512344) <rmosconi@inf.puc-rio.br>")
+        return
+
+    global all_start
+    all_start = time()
+    msg(2,"Load Instance data")
             
+    inst = Instance(args)
+
+    cg = CG.CG6(instance=inst,args=args)
+
+    if args.loadfile:
+        msg(0,"load saved model")
+        cg.load(args.loadfile)
+    else:
+        msg(0,"building LP Model")
+
+    cg.build_model()
+
+    for m in inst.M:
+        msg(1,"building machine %5d (of %5d) MIP model" % (m,inst.nmach))
+        cg.build_column_model(m)
+        
+    return
 
 
-            
+
+"""            
 continue_cond = True
 
 res = cg.solve_relax()
@@ -400,3 +370,4 @@ if args.new_solution_filename:
     if args.time:
         _time = time()
         print("%12.3f Done in %12.3f/%12.3f s" % (_time - all_start,_time - loop_start,_time - mip_start))
+"""
