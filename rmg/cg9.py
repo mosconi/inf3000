@@ -284,9 +284,10 @@ if args.verbose>1:
 if args.verbose>1:
     if args.time:
         print("%12.3f " % (time() - all_start), end='')
-    print("Solve")
+    print("Extend - solve")
 
 _time2 = time()
+cg.extend()
 res = cg.solve_relax()
 _time3 = time()
 
@@ -295,7 +296,6 @@ if args.verbose >1:
         print("%12.3f %12.3f" % (time() - all_start, _time3-_time1), end=' ')
     print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj))
         
-
 
 if args.verbose>1:
     print("-"*(int(columns)-2))
@@ -321,17 +321,19 @@ while cont_cond:
             print("%12.3f %12.3f" % (time() - all_start, _time2-_time1), end=' ')
         print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f %s" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj, res.allint))
 
-
-    while cg.cuts_add() is None:
-        pass
-    else:
-        if args.verbose>1:
-            print("-"*(int(columns)-2))
-            if args.time:
-                print("%12.3f " % (time() - all_start), end='')
-            print("solve - filter")
-        res = cg.solve_relax()
-        _time3 = time()
+    try:
+        while cg.cuts_add() is None:
+            pass
+        else:
+            if args.verbose>1:
+                print("-"*(int(columns)-2))
+                if args.time:
+                    print("%12.3f " % (time() - all_start), end='')
+                    
+                print("solve - filter")
+                
+            res = cg.solve_relax()
+            _time3 = time()
 
         if args.verbose >1:
             if args.time:
@@ -339,9 +341,12 @@ while cont_cond:
                 print("%20.3f %20.3f %8.3f (%8.3f %8.3f)   %.6f %17.3f %s" % (res.obj,first_obj, _time3 - _time1, _time3 - _time2, res.rtime, alpha, res.obj - first_obj, res.allint))
         
         changed = cg.cuts_filter()
+    except:
+        break
+
     #if changed == 0:
     #    cont_cond = False
-    if c >= inst.nproc:
+    if c >= inst.nproc*inst.nmach:
         break
     
 if res.allint:
