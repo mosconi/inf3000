@@ -77,6 +77,8 @@ class Instance:
             del(l[:self.nres])
             self.MMC[m]=l
 
+        self.M = range(self.nmach)
+
         nserv = lines.pop(0)[0]
         self.nserv=nserv
         delta=[0 for s in range(nserv)]
@@ -116,6 +118,8 @@ class Instance:
             self.R[p]=l[:nres]
             del(l[:nres])
             self.PMC[p]=l[0]
+
+        self.P = range(nproc)
             
         self.nbal = lines.pop(0)[0]
         self.bT=np.zeros((self.nres,self.nres),dtype=np.int32)
