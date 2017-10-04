@@ -46,7 +46,6 @@ class Stabilization(object):
         
     def linearkp1(self,omega,stabdual):
         
-        self._iterations +=1
         new_alpha = max(self._args.alpha_min, self._args.alpha0*(min(1,1 - (self._iterations - self._args.alpha_offset)*(self._args.alpha_scale)/self._instance.nproc)))
         self._best_pi = stabdual.pi * new_alpha
         self._best_mu = stabdual.mu * new_alpha
@@ -70,7 +69,7 @@ class Stabilization(object):
         return self._alpha
     
     def free(self,omega,stabdual):
-        self._iterations +=1
+
         new_alpha = 0.0
         self._best_pi = stabdual.pi * new_alpha
         self._best_mu = stabdual.mu * new_alpha
@@ -94,7 +93,7 @@ class Stabilization(object):
         return 0.0
     
     def constant(self,omega,stabdual):
-        self._iterations +=1
+
         new_alpha = self._args.alpha0
         self._best_pi = stabdual.pi * new_alpha
         self._best_mu = stabdual.mu * new_alpha
@@ -119,8 +118,6 @@ class Stabilization(object):
 
     def linearip1(self,omega,stabdual):
         
-        self._iterations +=1
-        
         if omega > self._best_omega:
             self._improvements += 1
             new_alpha = max(self._args.alpha_min, self._args.alpha0*(min(1,1 - (self._improvements - self._args.alpha_offset)*(self._args.alpha_scale)/self._instance.nproc)))
@@ -144,7 +141,6 @@ class Stabilization(object):
 
     def lineari(self,omega,stabdual):
         
-        self._iterations +=1
         
         if omega > self._best_omega:
             self._improvements += 1
@@ -169,7 +165,6 @@ class Stabilization(object):
 
     def lineark(self,omega,stabdual):
         
-        self._iterations +=1
         new_alpha = max(self._args.alpha_min, self._args.alpha0*(min(1,1 - (self._iterations - self._args.alpha_offset)*(self._args.alpha_scale)/self._args.alpha_steps)))
         self._best_pi = stabdual.pi * new_alpha
         self._best_mu = stabdual.mu * new_alpha
@@ -194,6 +189,7 @@ class Stabilization(object):
 
     
     def compute(self,omega,stabdual):
+        self._iterations +=1
         return getattr(self,self._args.method)(omega,stabdual)
     def best_omega(self):
         return self._best_omega
@@ -201,4 +197,5 @@ class Stabilization(object):
         return self._improvements
     def nonimprovements(self):
         return self._iterations - self._last_improvement
-
+    def iterations(self):
+        return self._iterations

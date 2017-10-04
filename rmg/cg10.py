@@ -41,17 +41,136 @@ def msg(level, msg, timeref=None):
             _time = time()
             print("%12.3f " % (_time  - all_start),end='')
             if timeref is not None:
-                print("%12.3f " % (_time - t),end='')
+                print("%12.3f " % (_time - timeref),end='')
                 
         print(msg)
     
-def line():
-    rows, columns = os.popen('stty size', 'r').read().split()
-    print("-"*(int(columns)-2))
+def line(level):
+    if args.verbose >level:
+        rows, columns = os.popen('stty size', 'r').read().split()
+        print("-"*(int(columns)))
     
+
+def build_models(args,inst,cg ):
+    cg.build_model()
+    
+    for m in inst.M:
+        msg(1,"building machine %5d (of %5d) MIP model" % (m,inst.nmach))
+        cg.build_column_model(m)
         
+
+def column_generation_loop(args,inst,cg):
+    continue_cond = True
+    
+    res = cg.solve()
+    first_obj = res.obj
+    best_int_obj = first_obj
+
+    stab = CG.Stabilization(inst, args)
+
+    alpha = stab.alpha0()
+
+    loop_start = time()
+    while continue_cond:
+        rtime = 0
+        line(1)
+        
+
+        r_start = time()
+        if args.dump:
+            cg.lpwrite(stab.iterations())
+
+        res = cg.solve()
+        if args.dump:
+            cg.lpwritesol(k = stab.iterations())
+        rtime+=res.rtime
+        r_stop = time()
+
+        msg(1,"%5d master %20.3f %20.3f %8.3f (%8.3f)   %.6f %20.3f %s" %(stab.iterations() ,res.obj,first_obj, r_stop - r_start, res.rtime, alpha, res.obj - first_obj, res.allint), timeref=loop_start)
+
+
+        if res is None:
+            raise Exception("LP não ótimo")
+        
+        rtime += res.rtime
+
+        stduals = stab.alpha(res)
+        omega = 0
+        add_col = False
+        for m in inst.M:
+            c_start = time()
+
+            sigma = stduals.eta_lb[:,m] + stduals.eta_ub[:,inst.iN[m]] + stduals.omikron_lb[:,m] + stduals.omikron_ub[:,inst.iL[m]]
+            
+            cg.column_prepare(machine = m,
+                              pi = stduals.pi,
+                              gamma = stduals.gamma,
+                              sigma = sigma,
+                              mu = stduals.mu[m])
+            if args.dump:
+                cg.column_write(machine = m, k = k)
+
+        
+            cres = cg.column_compute(machine = m)
+            
+
+            if args.validate:
+                vres = cg.column_validate(cres,
+                                          machine = m,
+                                          pi = stduals.pi,
+                                          gamma = stduals.gamma,
+                                          sigma = sigma,
+                                          mu = stduals.mu[m])
+
+                if vres.status != CG.CGValidateStatus.Valid:
+                    print(vres)
+                    raise Exception("problema ao validar coluna")
+                
+            omega += cres.rc
+            rtime += cres.rtime
+            
+            ares = cg.lp_add_col(m,cres)
+            
+            if ares.status == CG.CGAddStatus.Added:
+                add_col = True
+            elif ares.status == CG.CGAddStatus.NotAdded:
+                print(ares)
+                raise Exception("problema ao adicionar coluna")
+
+            c_stop = time()
+            msg(3,"%5d  %5d %20.3f %20.3f %8.3f (%8.3f) %s" % ( stab.iterations(), m, cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value), timeref=loop_start)
+            
+        if omega > - args.epslon or not add_col:
+            continue_cond = False
+        if stab.iterations() == args.maxsteps:
+            continue_cond = False
+
+        msg(1,"%5d  omega %20.3f %20.3f %8.3f (%8.3f)   %0.6f %5d %5d %8.3f %s" %(stab.iterations(),omega,stab.best_omega(), time() - r_start , rtime,alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega(), continue_cond),timeref=loop_start)
+        
+        alpha = stab.compute(omega = omega,stabdual = stduals)
+
+
+
+def cuts_loop(args,inst,cg):
+    pass
+
+def mip(args,inst,cg):
+    mip_start=time()
+
+    solution = cg.final_solve()
+
+    line(1)
+    msg(1,"Solution: %20.3f" % (solution.obj),timeref=mip_start)
+    print(' '.join(str(i) for i in inst.assign()))
+    print(' '.join(str(i) for i in solution.assign))
+
+    if args.new_solution_filename:
+        args.new_solution_filename.write(' '.join(str(i) for i in solution.assign))
+
+    line(1)
+    
 def main():
-    print("teste")
+
     if args.name:
         print("Rodrigo Mosconi (1512344) <rmosconi@inf.puc-rio.br>")
         return
@@ -70,156 +189,26 @@ def main():
     else:
         msg(0,"building LP Model")
 
-    cg.build_model()
+        build_models(args=args, inst=inst, cg=cg)
 
-    for m in inst.M:
-        msg(1,"building machine %5d (of %5d) MIP model" % (m,inst.nmach))
-        cg.build_column_model(m)
-        
-    return
+        column_generation_loop(args=args, inst=inst, cg=cg)
+        if args.loadfile:
+            msg(0,"saving the model")
+            cg.save(args.savefile)
+
+
+    cuts_loop(args=args, inst=inst, cg=cg)
+    
+    mip(args=args, inst=inst, cg=cg)
 
 
 
 """            
-continue_cond = True
-
-res = cg.solve_relax()
-first_obj = res.obj
-best_int_obj = first_obj
-
-stab = CG.Stabilization(inst, args)
-
-alpha = stab.alpha0()
-
-k = 0
-loop_start = time()
-while continue_cond:
-    rtime = 0
-    _time = time()
-    if args.verbose >1:
-        print("-"*(int(columns)-2))
-        if args.time:
-            print("%12.3f %12.3f " % (_time - all_start, _time - loop_start),end='')
-        print("%5d master" % (k),end=' ')
-    if args.log:
-        cg.lplog("\n/*"+"*"*70)
-        cg.lplog(" *")
-        cg.lplog(" * %12.3f %12.3f MASTER iteration %d" % (_time-all_start,_time-all_start,k))
-        cg.lplog(" *")
-        
-
-    r_start = time()
-    if args.dump:
-        cg.lpwrite(k)
-
-    res = cg.solve_relax()
-    if args.dump:
-        cg.lpwritesol(k = k)
-    r_stop = time()
-
-    if args.verbose >1:
-        print("%20.3f %20.3f %8.3f (%8.3f)   %.6f %17.3f %s" % (res.obj,first_obj, r_stop - r_start, res.rtime, alpha, res.obj - first_obj, res.allint))
-    if args.log:
-        cg.lplog("\n/*"+"*"*70)
-        cg.lplog(" *")
-        cg.lplog(" *T:[MASTER:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %20.3f" % (k,_time - all_start, _time - loop_start ,res.obj,first_obj, r_stop - r_start, res.rtime, res.obj - first_obj))
-        cg.lplog(" *")
-
-    #if  abs(first_obj - res.obj) > args.epslon: break
-
-    rtime += res.rtime
-    if res is None:
-        raise Exception("LP não ótimo")
-    
-
-    stduals = stab.alpha(res)
-    omega = 0
-    add_col = False
-
-    for m in range(inst.nmach):
-        _time = time()
-        if args.verbose>3:
-            if args.time:
-                print("%12.3f %12.3f " % (_time - all_start, _time - loop_start),end='')
-            print("%5d  %5d" % (k,m),end=' ')
-        if args.log:
-            cg.machlog(m,"\n/*"+"*"*70)
-            cg.machlog(m," *")
-            cg.machlog(m," * %12.3f %12.3f machine[%d] iteration %d" % (_time-all_start,_time-all_start,m,k))
-            cg.machlog(m," *")
-
-        c_start = time()
-        sigma = stduals.eta_lb[:,m] + stduals.eta_ub[:,inst.iN[m]] + stduals.omikron_lb[:,m] + stduals.omikron_ub[:,inst.iL[m]]
-
-        cg.column_prepare(machine = m,
-                          pi = stduals.pi,
-                          gamma = stduals.gamma,
-                          sigma = sigma,
-                          mu = stduals.mu[m])
-        if args.dump:
-            cg.column_write(machine = m, k = k)
-        
-        cres = cg.column_compute(machine = m)
-
-        c_stop = time()
-        if cres is None:
-            raise Exception("problema ao calcular coluna")
-
-
-        if args.dump:
-            cg.column_writesol(machine = m, k = k)
-
-        if args.validate:
-            vres = cg.column_validate(cres,
-                                      machine = m,
-                                      pi = stduals.pi,
-                                      gamma = stduals.gamma,
-                                      sigma = sigma,
-                                      mu = stduals.mu[m])
-
-            if vres.status != CG.CGValidateStatus.Valid:
-                print(vres)
-                raise Exception("problema ao validar coluna")
-        
-        omega += cres.rc
-        ares = cg.lp_add_col(m,cres)
-
-        if ares.status == CG.CGAddStatus.Added:
-            add_col = True
-            
-        elif ares.status == CG.CGAddStatus.NotAdded:
-            print(ares)
-            raise Exception("problema ao adicionar coluna")
-        
-        if args.verbose>3:
-            print("%20.3f %20.3f %8.3f (%8.3f) %s" %(cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value),end=' ' )
-            if ares.status == CG.CGAddStatus.Exist:
-                print(ares.var.VarName)
-            else:
-                print()
-        rtime += cres.rtime
-        if args.log:
-            cg.machlog(m,"\n/*"+"*"*70)
-            cg.machlog(m," *")
-            cg.machlog(m," *T:[%06d:%05d] %12.3f %12.3f %20.3f %20.3f %8.3f (%8.3f) %s" % (m,k,_time - all_start, _time - loop_start, cres.rc, cres.obj, c_stop -c_start ,cres.rtime ,ares.status.value))
-            cg.machlog(m," *")
-
-    _time= time()
-                
-    if args.verbose>1:
-        if args.time:
-            print("%12.3f %12.3f " % (_time - all_start, _time - loop_start),end='')
-        print("%5d  omega %20.3f %20.3f %8.3f (%8.3f)" %(k,omega,stab.best_omega(), _time - r_start , rtime),end=' ')
-
-    
-    if omega > - args.epslon or not add_col:
-        continue_cond = False
     if k >= 4 and False:
         continue_cond = False
 
     if continue_cond:
         if args.verbose > 1:
-            print("C %0.6f %5d %5d %0.3f" %(alpha, stab.improvements(), stab.nonimprovements(),omega/stab.best_omega()))
         _c = "C"
     else:
         if args.verbose > 1:

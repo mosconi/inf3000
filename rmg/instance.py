@@ -38,6 +38,7 @@ class Instance:
         nres = lines.pop(0)[0]
 
         self.nres = nres
+        self.SR = range(nres)
 
         self.T=np.zeros(self.nres,dtype=np.int32)
         self.Wlc=np.zeros(self.nres,dtype=np.int32)
