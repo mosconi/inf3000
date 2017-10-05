@@ -52,15 +52,44 @@ def line(level):
     
 
 def build_models(args,inst,cg ):
+
+    x0 = inst.map_assign()
     cg.build_model()
+
+    cg.write_suffix("empty")
     
     for m in inst.M:
         msg(1,"building machine %5d (of %5d) MIP model" % (m,inst.nmach))
         cg.build_column_model(m)
+            
+        mres = inst.mach_validate(m,x0[:,m])
+        cres = CG.CGColumn(obj=mres.obj,
+                           procs = x0[:,m],
+                           rc = 0,
+                           g = None,
+                           servs = None,
+                           z = None,
+                           hsigma = None,
+                           ggamma = None,
+                           pixp = None,
+                           u = None,
+                           ut = None,
+                           a = None,
+                           d = None,
+                           b = None,
+                           pmc = None,
+                           mmc = None,
+                           rtime = None
+        )
+                
+        ares = cg.lp_add_col(m,cres)
         
 
 def column_generation_loop(args,inst,cg):
     continue_cond = True
+
+    if args.dump:
+        cg.write_suffix("first_solve")
     
     res = cg.solve()
     first_obj = res.obj
@@ -78,11 +107,11 @@ def column_generation_loop(args,inst,cg):
 
         r_start = time()
         if args.dump:
-            cg.lpwrite(stab.iterations())
+            cg.write_suffix(stab.iterations())
 
         res = cg.solve()
         if args.dump:
-            cg.lpwritesol(k = stab.iterations())
+            cg.writesol(stab.iterations())
         rtime+=res.rtime
         r_stop = time()
 
@@ -152,7 +181,24 @@ def column_generation_loop(args,inst,cg):
 
 
 def cuts_loop(args,inst,cg):
-    pass
+    line(1)
+    _t = time()
+    msg(1,"   Extending", timeref=_t)
+    cg.extend()
+    msg(1,"   Done, pre-gen all PPP cuts", timeref=_t)
+    #cg.cuts_prepare_all()
+    msg(1,"   Done, first solve", timeref=_t)
+    res = cg.solve()
+    if res.allint:
+        msg(1,"  LP solution is alreay integer, skipping all") 
+        return
+    cg.cuts_print_violated()
+    
+    #continue_cond = True
+    #while continue_cond:
+        
+    
+
 
 def mip(args,inst,cg):
     mip_start=time()

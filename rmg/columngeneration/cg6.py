@@ -26,7 +26,12 @@ class CG6(object):
         self._ppcounts = np.zeros((nproc, nproc), dtype=np.int32)
         self._mpcounts = np.zeros((nmach, nproc), dtype=np.int32)
 
+        self._cuts_ppp_expr = {}
 
+        for p1 in range(nproc):
+            for p2 in range(p1+1,nproc):
+                for p3 in range(p2+1,nproc):
+                    self._cuts_ppp_expr[(p1,p2,p3)] = LinExpr()
 
     def __del__(self):
         M = self._instance.M
@@ -89,20 +94,15 @@ class CG6(object):
 
         x0 = self._instance.map_assign()
 
-        for m in M:
-            mval = self._instance.mach_validate(m,x0[:,m])
-            var = self._model.addVar(vtype=GRB.CONTINUOUS, obj= mval.obj,
-                                                   lb=0,ub=1,name="lbd[%d,0]"%(m))
-            var._procs = x0[:,m]
-            self._lbd[m].append(var)
             
         
         self._model.update()
-
-        self._p_constr=self._model.addConstrs((quicksum(self._lbd[m][0]*x0[p,m] for m in M)==1 
+        
+        d = LinExpr()
+        self._p_constr=self._model.addConstrs((d == 1 
                                                for p in P),
                                               name="p_constr")
-        self._m_constr=self._model.addConstrs((self._lbd[m][0]==1 
+        self._m_constr=self._model.addConstrs((d == 1 
                                                for m in M),
                                               name="m_constr")
 
@@ -295,6 +295,19 @@ class CG6(object):
         self._model.write("%s.lp" %self._args.run_name)
         self._model.write("%s.mps" %self._args.run_name)
 
+    def write_suffix(self,suffix):
+        if not self._model:
+            raise Exception("Model not defined")
+
+        self._model.write("%s_%s.lp" % (self._args.run_name,suffix))
+        self._model.write("%s_%s.mps" % (self._args.run_name,suffix))
+
+
+    def writesol(self,suffix):
+        if not self._model:
+            raise Exception("Model not defined")
+
+        self._model.write("%s_%s.sol" % (self._args.run_name,suffix))
 
 
     def iis(self):
@@ -308,6 +321,11 @@ class CG6(object):
     def final_solve(self):
         if not self._model:
             raise Exception("Model not defined")
+
+        for m in self._instance.M:
+            for v in self._lbd[m]:
+                v.vtype = GRB.INTEGER
+
 
         self._model.optimize()
         status = self._model.Status
@@ -353,10 +371,10 @@ class CG6(object):
 
         s = self._model.Status
         if s == GRB.Status.INF_OR_UNBD:
-            self.lpiis()
+            self.iis()
             print("inf or unbd")
         elif s == GRB.Status.INFEASIBLE:
-            self.lpiis()
+            self.iis()
             print("Infeasible ")
         elif s == GRB.Status.UNBOUNDED:
             print("unbounded")
@@ -555,8 +573,11 @@ class CG6(object):
         nres = self._instance.nres
         nserv = self._instance.nserv
         S = self._instance.S
+        iS = self._instance.iS
         iL = self._instance.iL
         iN = self._instance.iN
+
+        x0 = self._instance.mach_map_assign(machine)
 
         for v in self._lbd[machine]:
             if np.array_equal(compcol.procs,v._procs):
@@ -578,6 +599,147 @@ class CG6(object):
             name = "lbd[%d][%d]" % (machine,len(self._lbd[machine]))
         )
         var._procs = compcol.procs
+
+        var._serv = np.zeros(nserv,dtype=np.int32)
+
+        for p1 in [ p for p in P if var._procs[p] == 1 ]:
+            self._mpcounts[machine,p1]+=1
+            var._serv[iS[p1]] = 1
+            for p2 in [ p for p in range(p1,nproc) if var._procs[p] == 1 ]:
+                self._ppcounts[p1,p2]+=1
+
+        var._z = np.zeros(nproc,dtype=np.int32)
+        var._gserv = np.zeros(nserv,dtype=np.int32)
+        for p1 in [ p for p in P if var._procs[p] == 0 ]:
+            var._z[p1] = x0[p1]
+            var._gserv[iS[p1]] += x0[p1]
+
         self._lbd[machine].append(var)
-        
+        for p1 in range(nproc):
+            for p2 in range(p1+1,nproc):
+                for p3 in range(p2+1,nproc):
+                    if (var._procs[p1] + var._procs[p2] + var._procs[p3])//2 ==1:
+                        self._cuts_ppp_expr[(p1,p2,p3)] += var
+                    
+                    
         return CGAdd(status=CGAddStatus.Added,var=var)
+
+    def extend(self):
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+        M = self._instance.M
+        nres = self._instance.nres
+        nserv = self._instance.nserv
+        sdep = self._instance.sdep
+        delta = self._instance.delta
+        L = self._instance.L
+        S = self._instance.S
+        N = self._instance.N
+        iL = self._instance.iL
+        iN = self._instance.iN
+        WSMC = self._instance.WSMC
+
+        self._h=self._model.addVars(nserv,len(N),vtype=GRB.CONTINUOUS,
+                                  lb=0,ub=1,name="h")
+
+        self._o=self._model.addVars(nserv,len(L),vtype=GRB.CONTINUOUS,
+                                  lb=0,ub=1,name="o")
+
+        self._g=self._model.addVars(nserv,vtype=GRB.CONTINUOUS,
+                                  lb=0,ub=1,name="o")
+
+        self._smc = self._model.addVar(name="smc",vtype=GRB.CONTINUOUS,
+                                    lb=0,obj=WSMC)
+
+        
+        self._model.update()
+
+        self._h_lb_constr=self._model.addConstrs((0 - self._h[s,n] >= 0
+                                                for s in sorted(S)
+                                                for n in N
+                                                for m in N[n]),
+                                               name="h_lb_constr")
+        self._h_ub_constr=self._model.addConstrs((0 - self._h[s,n] >=0
+                                                for s in sorted(S)
+                                                for n in N),
+                                               name="h_ub_constr")
+
+
+        self._o_ub_constr=self._model.addConstrs((-self._o[s,l] + 0 >=0
+                                                for s in sorted(S)
+                                                for l in L),
+                                               name="o_ub_constr")
+        self._o_lb_constr=self._model.addConstrs((-self._o[s,l] + 0  <=0
+                                                for s in sorted(S)
+                                                for l in L
+                                                for m in L[l]),
+                                               name="o_lb_constr")
+
+        self._dep_constr = self._model.addConstrs((self._h[s,n] <= self._h[_s,n]
+                                                 for n in N
+                                                 for s in sdep
+                                                 for _s in sdep[s]),
+                                                name="dep")
+
+        self._spread_constr = \
+                              self._model.addConstrs((self._o.sum(s,'*') >= delta[s]
+                             for s in sorted(S)),
+                                                   name="spread")
+
+        self._g_constr = self._model.addConstrs((-self._g[s] == 0 
+                                              for s in sorted(S)),
+                                             name="g")
+
+        self._smc_constr = self._model.addConstrs((self._smc >= self._g[s]
+                                                for s in sorted(S)),
+                                               name="smc")
+        
+        self._model.update()
+        
+        # for each column, complete the new constraints
+
+        
+        for m in M:
+            for v in self._lbd[m]:
+                for s in sorted(S):
+                    self._model.chgCoeff( self._h_lb_constr[s,iN[m],m], v, v._serv[s])
+                    self._model.chgCoeff( self._h_ub_constr[s,iN[m]], v,  v._serv[s])
+                    self._model.chgCoeff( self._o_lb_constr[s,iL[m],m], v,  v._serv[s])
+                    self._model.chgCoeff( self._o_ub_constr[s,iL[m]], v,  v._serv[s])
+                    self._model.chgCoeff( self._g_constr[s], v, v._gserv[s])
+
+        self._model.update()
+
+    def cuts_prepare_all(self):
+
+        nproc = self._instance.nproc
+        M = self._instance.M
+
+        total = nproc * (nproc -1 ) * (nproc -2)/6
+        c=0
+        for p1 in range(nproc):
+            for p2 in range(p1+1,nproc):
+                for p3 in range(p2+1,nproc):
+                    c+=1
+                    expr = LinExpr()
+                    for m in M:
+                        for v in self._lbd[m]:
+                            if (v._procs[p1] + v._procs[p2] + v._procs[p3])//2 ==1:
+                                expr += v
+
+                    if c %100 ==0 :
+                        print("%15d de %15d (%7.3f)" %(c, total,100.*c/total))
+
+
+                    self._cuts_ppp_expr[(p1,p2,p3)] = expr
+
+    def cuts_print_violated(self):
+
+        max_ppp = None
+        max_value = 0
+        for k,expr in self._cuts_ppp_expr.items():
+            if expr.getValue() >1:
+                print(k, expr.getValue())
+                if expr.getValue() > max_value:
+                    max_ppp = k
+                    max_value = expr.getValue()
