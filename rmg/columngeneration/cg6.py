@@ -20,18 +20,20 @@ class CG6(object):
         
         self._cb = lambda model, where: None
         self._mach = [lambda: None for m in M]
-        print([m for m in M])
         self._lbd = [[] for p in P]
 
         self._ppcounts = np.zeros((nproc, nproc), dtype=np.int32)
         self._mpcounts = np.zeros((nmach, nproc), dtype=np.int32)
 
         self._cuts_ppp_expr = {}
+        self._vars_not_in_cuts_ppp = {}
 
+        return 
         for p1 in range(nproc):
             for p2 in range(p1+1,nproc):
                 for p3 in range(p2+1,nproc):
                     self._cuts_ppp_expr[(p1,p2,p3)] = LinExpr()
+                    self._vars_not_in_cuts_ppp[(p1,p2,p3)] = []
 
     def __del__(self):
         M = self._instance.M
@@ -318,13 +320,26 @@ class CG6(object):
         self._model.write("%s.ilp" %self._args.run_name)
 
 
-    def final_solve(self):
+    def convert(self):
         if not self._model:
             raise Exception("Model not defined")
 
+        self._smc.vtype=GRB.INTEGER
+        
         for m in self._instance.M:
             for v in self._lbd[m]:
-                v.vtype = GRB.INTEGER
+                v.vtype = GRB.BINARY
+
+        for h in self._h.select():
+            h.vtype = GRB.BINARY
+        for o in self._o.select():
+            o.vtype = GRB.BINARY
+        for g in self._g.select():
+            g.vtype = GRB.BINARY
+
+    def final_solve(self):
+        if not self._model:
+            raise Exception("Model not defined")
 
 
         self._model.optimize()
@@ -615,14 +630,20 @@ class CG6(object):
             var._gserv[iS[p1]] += x0[p1]
 
         self._lbd[machine].append(var)
+                    
+        return CGAdd(status=CGAddStatus.Added,var=var)
+
+            
+        var._in_cuts_ppp = {}
         for p1 in range(nproc):
             for p2 in range(p1+1,nproc):
                 for p3 in range(p2+1,nproc):
                     if (var._procs[p1] + var._procs[p2] + var._procs[p3])//2 ==1:
                         self._cuts_ppp_expr[(p1,p2,p3)] += var
-                    
-                    
-        return CGAdd(status=CGAddStatus.Added,var=var)
+                        var._in_cuts_ppp[(p1,p2,p3)] = self._cuts_ppp_expr[(p1,p2,p3)]
+                    else:
+                        self._vars_not_in_cuts_ppp[(p1,p2,p3)].append(var)
+                        
 
     def extend(self):
         nproc = self._instance.nproc
@@ -710,7 +731,31 @@ class CG6(object):
 
         self._model.update()
 
+
+    def cuts_prestats(self):
+
+        nproc = self._instance.nproc
+        nmach = self._instance.nmach
+        M = self._instance.M
+
+        psum = np.zeros(nproc,dtype=np.int32)
+
+        msum = np.zeros(nmach,dtype=np.int32)
+
+        for m in M:
+            msum[m] = len(self._lbd[m])
+            for v in self._lbd[m]:
+                psum += v._procs
+        print("total de vars:   %5d" %self._model.numvars)
+        print("min de M: %5d em %5d" %(msum.min(), msum.argmin()))
+        print("min de P: %5d em %5d" %(psum.min(), psum.argmin()))
+        if psum.min() < msum.min():
+            print(self._p_constr[psum.argmin()])
+        else:
+            print(self._m_constr[msum.argmin()])
+        
     def cuts_prepare_all(self):
+        
 
         nproc = self._instance.nproc
         M = self._instance.M

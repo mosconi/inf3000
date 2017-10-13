@@ -186,13 +186,13 @@ def cuts_loop(args,inst,cg):
     msg(1,"   Extending", timeref=_t)
     cg.extend()
     msg(1,"   Done, pre-gen all PPP cuts", timeref=_t)
-    #cg.cuts_prepare_all()
+    cg.cuts_prestats()
     msg(1,"   Done, first solve", timeref=_t)
     res = cg.solve()
     if res.allint:
-        msg(1,"  LP solution is alreay integer, skipping all") 
+        msg(1,"  LP solution is alreay integer, skipping all", timeref=_t) 
         return
-    cg.cuts_print_violated()
+    #cg.cuts_print_violated()
     
     #continue_cond = True
     #while continue_cond:
@@ -200,9 +200,15 @@ def cuts_loop(args,inst,cg):
     
 
 
-def mip(args,inst,cg):
-    mip_start=time()
 
+def mip(args,inst,cg):
+    line(1)
+    mip_start=time()
+    msg(1,"   Converting ", timeref=mip_start)
+
+    cg.convert()
+    msg(1,"   Solving", timeref=mip_start)
+    
     solution = cg.final_solve()
 
     line(1)
@@ -226,6 +232,8 @@ def main():
     msg(2,"Load Instance data")
             
     inst = Instance(args)
+
+    msg(2,"CG Instance ")
 
     cg = CG.CG6(instance=inst,args=args)
 

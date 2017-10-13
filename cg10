@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import rmg.cg10
 if __name__ == "__main__" :
-  print(dir())
   rmg.cg10.main()
 
