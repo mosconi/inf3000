@@ -35,33 +35,36 @@ def sat(instance):
 
     nproc = instance.nproc
     nmach = instance.nmach
+
     P = instance.P
     M = instance.M
     S = instance.S
     N = instance.N
     L = instance.L
 
-    print("creating vars - x")
+    print(" %10.3f creating vars - x" % (time() - all_start))
     x = np.array([[Variable('x[%d,%d]' % (p,m)) for m in M] for p in P])
-    print("creating vars - h")
+    print(" %10.3f creating vars - h" % (time() - all_start))
     h = np.array([[Variable('h[%d,%d]' % (s,n)) for n in N] for s in S])
-    print("creating vars - o")
+    print(" %10.3f creating vars - o" %(time() - all_start))
     o = np.array([[Variable('o[%d,%d]' % (s,l)) for l in L] for s in S])
 
-    print("H[s,n]")
+    print(" %10.3f H[s,n]" %( time() - all_start))
     for s in S:
         for n in N:
             pres_expr = Cnf()
             for p in S[s]:
                 for m in N[n]:
-                    pres_expr |=x[p,m]
+                    pres_expr |= x[p,m]
                     
             expr &= h[s,n] >> pres_expr
             expr &= pres_expr >> h[s,n]
             for sd in instance.sdep[s]:
                 expr &= h[s,n] >> h[sd,n]
-    print("O[s,l]")
+                
+    print(" %10.3f O[s,l]" %( time() - all_start))
     for s in S:
+        if instance.delta[s] ==1 : continue
         for l in L:
             pres_expr = Cnf()
             for p in S[s]:
@@ -71,44 +74,50 @@ def sat(instance):
             expr &= o[s,l] >> pres_expr
             expr &= pres_expr >> o[s,l]
     
-    print("X[p,m]")
+    print(" %10.3f X[p,m]" %( time() - all_start))
     
     for p in P:
         p_constr1 = Cnf()
         p_constr2 = Cnf()
         for m in M:
             p_constr1 |= x[p,m]
-        for _m in combinations(M,2):
-            p_constr2 &= x[p,_m[0]] >> -x[p,_m[1]]
+            for m2 in range(m,nmach):
+                p_constr2 &= x[p,m] >> -x[p,m2]
         expr &= p_constr1 & p_constr2
 
-    print("X[p,m] - conflito")
+    print(" %10.3f X[p,m] - conflito" %(time() - all_start))
         
     for m in M:
         for s in S:
             conf_constr = Cnf()
-            if len(S[s]) ==1: continue
-            for _p in combinations(S[s],2):
-                conf_constr &= x[_p[0],m] >> -x[_p[1],m]
+            if len(S[s]) == 1: continue
+            for i1 in range(len(S[s])):
+                for i2 in range(i1,len(S[s])):
+                    conf_constr &= x[S[s][i1],m] >> -x[S[s][i2],m]
             expr &= conf_constr
 
 
+    print(" %10.3f solving" %( time() - all_start))
+
     io = DimacsCnf()
-    s = io.tostring(expr)
-    print(s)
+    #s = io.tostring(expr)
+    #print(s)
     solver = Minisat('minisat %s %s')
 
     solution = solver.solve(expr)
+    print(" %10.3f done" %( time() - all_start))
 
     if not solution.success:
-        print("sem solucao")
+        print(" %10.3f sem solucao" % (time() - all_start))
         exit(0)
+
+    print(" %10.3f solucao" % (time() - all_start))
 
     xsol = np.empty((nproc,nmach),dtype=np.int32)
     for p in P:
         for m in M:
-            print(p,m,solution[x[p,m]])
-            print(io.varname(x[p,m]))
+            #print(p,m,solution[x[p,m]])
+            #print(io.varname(x[p,m]))
             xsol[p,m] = solution[x[p,m]]
 
     print(xsol)
@@ -126,15 +135,16 @@ def main():
         print("Rodrigo Mosconi (1512344) <rmosconi@inf.puc-rio.br>")
         return
 
-    global all_start
+    global all_start 
     all_start = time()
-    print("Load Instance data")
+    print(" %10.3f Load Instance data" % (time() - all_start))
     #msg(2,"Load Instance data")
             
     inst = Instance(args)
-    print("done")
+    print(" %10.3f done" % (time() - all_start))
 
     sat(inst)
+    print(" %10.3f done" % (time() - all_start))
 
 
 
