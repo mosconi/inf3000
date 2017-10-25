@@ -3,7 +3,8 @@
 import argparse,os,sys
 import numpy as np
 
-np.set_printoptions(formatter={'float_kind': lambda x: "%+17.3f" % x,'int': lambda x: "%+17d" % x, })
+np.set_printoptions(formatter={'float_kind': lambda x: "%+17.3f" %
+x,'int': lambda x: "%+17d" % x, })
 
 from time import time
 
@@ -12,9 +13,6 @@ from rmg import roadef,common,instance,Instance
 from satispy import Variable,Cnf
 from satispy.io import DimacsCnf
 from satispy.solver import Minisat
-
-
-from itertools import combinations
 
 parser = argparse.ArgumentParser(description="",
                                  parents=[roadef.parser,
@@ -35,6 +33,9 @@ def sat(instance):
 
     nproc = instance.nproc
     nmach = instance.nmach
+    nserv = instance.nserv
+    nneigh = len(instance.N)
+    nloc = len(instance.L)
 
     P = instance.P
     M = instance.M
@@ -43,14 +44,26 @@ def sat(instance):
     L = instance.L
 
     print(" %10.3f creating vars - x" % (time() - all_start))
-    x = np.array([[Variable('x[%d,%d]' % (p,m)) for m in M] for p in P])
+    x = np.empty((nproc,nmach), dtype=object)
+    for p in P:
+        for m in M:
+            x[p,m]=Variable('x[%d,%d]' % (p,m))
+            
     print(" %10.3f creating vars - h" % (time() - all_start))
-    h = np.array([[Variable('h[%d,%d]' % (s,n)) for n in N] for s in S])
+    h = np.empty((nserv,nneigh), dtype=object)
+    for s in S:
+        for n in N:
+            h[s,n] = Variable('h[%d,%d]' % (s,n))
+
     print(" %10.3f creating vars - o" %(time() - all_start))
-    o = np.array([[Variable('o[%d,%d]' % (s,l)) for l in L] for s in S])
+    o = np.empty((nserv,nloc), dtype=object)
+    for s in S:
+        for l in L:
+            o[s,l] = Variable('o[%d,%d]' % (s,l))
 
     print(" %10.3f H[s,n]" %( time() - all_start))
     for s in S:
+        #print(" %10.3f H[%6d,n]" %( time() - all_start,s))
         for n in N:
             pres_expr = Cnf()
             for p in S[s]:
@@ -64,6 +77,7 @@ def sat(instance):
                 
     print(" %10.3f O[s,l]" %( time() - all_start))
     for s in S:
+        #print(" %10.3f O[%6d,l]" %( time() - all_start,s))
         if instance.delta[s] ==1 : continue
         for l in L:
             pres_expr = Cnf()
@@ -73,15 +87,17 @@ def sat(instance):
                     
             expr &= o[s,l] >> pres_expr
             expr &= pres_expr >> o[s,l]
-    
+   
     print(" %10.3f X[p,m]" %( time() - all_start))
     
     for p in P:
+        #print(" %10.3f X[%6d, m]" %( time() - all_start, p))
         p_constr1 = Cnf()
         p_constr2 = Cnf()
         for m in M:
             p_constr1 |= x[p,m]
-            for m2 in range(m,nmach):
+
+            for m2 in range(m+1,nmach):
                 p_constr2 &= x[p,m] >> -x[p,m2]
         expr &= p_constr1 & p_constr2
 
@@ -92,7 +108,7 @@ def sat(instance):
             conf_constr = Cnf()
             if len(S[s]) == 1: continue
             for i1 in range(len(S[s])):
-                for i2 in range(i1,len(S[s])):
+                for i2 in range(i1+1,len(S[s])):
                     conf_constr &= x[S[s][i1],m] >> -x[S[s][i2],m]
             expr &= conf_constr
 

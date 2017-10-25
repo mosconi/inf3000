@@ -1,6 +1,7 @@
 import argparse
 
 from collections import namedtuple,defaultdict
+from enum import Enum
 
 import numpy as np
 
@@ -8,6 +9,14 @@ parser = argparse.ArgumentParser(add_help=False,
                                  description="Arguments for instance data")
 
 Validate = namedtuple('Validate',['status','obj'])
+
+class ValidateStatus(Enum):
+    Valid = "valid"
+    Conflict = "conflict"
+    Overcapacity = "over-capacity"
+    Dependency = "missing dependency"
+    Spread = "spread"
+    Allocation = "allocation"
 
 
 class Instance:
@@ -169,12 +178,23 @@ class Instance:
 
         for s in self.S:
             if map_assign[self.S[s]].sum()> 1:
-                return Validate(False,0)
+                return Validate(ValidateStatus.Conflict,0)
 
-        _util = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
+        #print("map new")
+        #print(map_assign)
+        #print("map old")
+        #print(self.__mach_map_assign[:,machine])
+        moved_procs = self.__mach_map_assign[:,machine] - map_assign 
+        moved_procs[moved_procs<0]=0
+        #print("map mov")
+        #print(moved_procs)
+            
+        _util   = (self.R*map_assign.reshape(self.nproc,1)).sum(axis=0)
+        _util_t = (self.T*self.R*moved_procs.reshape(self.nproc,1)).sum(axis=0)
 
-        if any(_util > self.C[machine]):
-            return Validate(False,0)
+        if any(_util + _util_t > self.C[machine]):
+            print(map_assign)
+            return Validate(ValidateStatus.Overcapacity,0)
 
         _obj1 = _util - self.SC[machine]
         _obj1[_obj1<0]=0
@@ -189,9 +209,6 @@ class Instance:
         )
         _obj2[_obj2<0] = 0
         
-        moved_procs = map_assign - self.__mach_map_assign[:,machine]
-
-        moved_procs[moved_procs<0]=0
         
         _obj3=self.PMC*moved_procs
         _obj5=np.array([0],dtype=np.int32)
@@ -199,8 +216,98 @@ class Instance:
 
         _obj=(self.Wlc*_obj1).sum()+(self.Wbal*_obj2).sum()+_obj3.sum()+_obj5.sum()
 
-        return Validate(True,_obj)
+        return Validate(ValidateStatus.Valid,_obj)
 
+    def map_validate(self,solution=None):
+
+        #if not isinstance(solution, np.ndarray):
+        #    raise Exception("Solution is not numpy")
+
+        if solution.shape != (self.nproc,self.nmach):
+            raise Exception("Solution has incorrect shape")
+
+        _obj = 0
+        # all proc allocated
+        if any(solution.sum(axis=1)!=np.ones(self.nproc,dtype=np.int32)):
+            return Validate(ValidateStatus.Allocation,0)
+
+        # conflito
+        for s in self.S:
+            t = solution[self.S[s]]
+            if any(t.sum(axis=0)>1):
+                return Validate(ValidateStatus.Conflict,0)
+
+        # h[s,n]
+        h = np.zeros((self.nserv,len(self.N)),dtype=np.int32)
+        for s in self.S:
+            for n in self.N:
+                h[s,n] = solution[np.ix_(self.S[s],self.N[n])].max()
+                
+        # o[s,l]
+        o = np.zeros((self.nserv,len(self.L)),dtype=np.int32)
+        for s in self.S:
+            for l in self.L:
+                o[s,l] = solution[np.ix_(self.S[s],self.L[l])].max()
+
+        # spread
+        if any(o.sum(axis=1) < self.delta):
+            return Validate(ValidateStatus.Spread,0)
+
+        # dependency
+
+        for s in self.S:
+            s_ref = h[s]
+            s_dep = h[self.sdep[s]]
+            if (s_dep - s_ref < 0).any():
+                return Validate(ValidateStatus.Dependency,0)
+                
+                
+        # z out
+        z = self.__mach_map_assign - solution 
+        z[z<0] = 0
+                
+        # utilization & avail
+        u  = solution.T.dot(self.R)
+        ut = z.T.dot(self.R)*self.T
+        a  = self.C - u
+        d = u - self.SC
+        d[d<0]=0
+
+        b = np.empty((self.nmach,self.nres,self.nres), dtype=np.int32)
+        
+        # capacity
+        if (u + ut > self.C).any():
+            return Validate(ValidateStatus.Overcapacity,0)
+
+            
+        # load cost:
+        lc = d.sum(axis=0)
+        _obj1 = (self.Wlc*lc).sum()
+
+        # balance
+
+        for m in self.M:
+            for r1 in range(self.nres):
+                for r2 in range(self.nres):
+                    b[m,r1,r2] = self.bT[r1,r2] * a[m,r1] - a[m,r2]
+
+        b[b<0] = 0
+
+        bc=b.sum(axis=0)
+        _obj2= (self.Wbal * bc).sum()
+
+        _obj3 = self.WPMC*(self.PMC * z.sum(axis=1)).sum()
+
+
+        _serv_cost = max([z.sum(axis=1)[self.S[s]].sum() for s in self.S])
+        _obj4 = self.WSMC * _serv_cost
+
+
+        _obj5 = self.WMMC * (self.__mach_map_assign.dot(self.MMC)*solution).sum()
+
+        return Validate(ValidateStatus.Valid,_obj1+_obj2+_obj3+_obj4+_obj5)
+
+        
     def validate(self,solution=None):
 
         if not solution:
